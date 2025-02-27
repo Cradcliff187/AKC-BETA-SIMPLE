@@ -1,0 +1,918 @@
+<script>
+// Check at load time if google.script.run is available
+console.log("EstimateCreator component script loaded.");
+if (typeof google === "undefined" || !google.script || !google.script.run) {
+  console.error("google.script.run is NOT available. Make sure this page is served by the Apps Script HTML service.");
+} else {
+  console.log("google.script.run is available.");
+}
+
+// Helper function to validate customer data structure
+const validateCustomerResponse = (data) => {
+  if (!Array.isArray(data)) {
+    console.error("Customer data is not an array:", data);
+    return false;
+  }
+  
+  // Check first customer object structure
+  if (data.length > 0) {
+    const requiredFields = ['customerId', 'name', 'address'];
+    const firstCustomer = data[0];
+    const missingFields = requiredFields.filter(field => !firstCustomer.hasOwnProperty(field));
+    
+    if (missingFields.length > 0) {
+      console.error("Customer data missing required fields:", missingFields);
+      return false;
+    }
+  }
+  
+  return true;
+};
+
+const EstimateCreator = () => {
+  // Log component load
+  console.log("EstimateCreator component instantiated.");
+
+  // Step management
+  const [step, setStep] = React.useState('CUSTOMER_TYPE'); // 'CUSTOMER_TYPE', 'CUSTOMER_DETAILS', 'SITE_LOCATION', 'PROJECT_DETAILS'
+  const [message, setMessage] = React.useState({ text: '', type: '' });
+  const [loading, setLoading] = React.useState(false);
+
+  // Customer state
+  const [isNewCustomer, setIsNewCustomer] = React.useState(false);
+  const [customers, setCustomers] = React.useState([]);
+  const [selectedCustomerId, setSelectedCustomerId] = React.useState('');
+  const [customerData, setCustomerData] = React.useState({
+    name: '',
+    address: '',
+    city: '',
+    state: '',
+    zip: '',
+    email: '',
+    phone: ''
+  });
+
+  // Project state
+  const [projectData, setProjectData] = React.useState({
+    name: '',
+    siteLocationAddress: '',
+    siteLocationCity: '',
+    siteLocationState: '',
+    siteLocationZip: '',
+    scopeOfWork: '',
+    tableItems: [{ itemService: '', description: '', qtyHours: '', rate: '', amount: '' }],
+    totalAmount: 0,
+    contingencyAmount: 0  // Keep contingency amount as requested
+  });
+
+  // Document preview state
+  const [previewUrl, setPreviewUrl] = React.useState('');
+  const [documentGenerated, setDocumentGenerated] = React.useState(false);
+  const [estimateId, setEstimateId] = React.useState('');
+
+  const mountedRef = React.useRef(true);
+
+  // Add new state for site location selection
+  const [usePrimaryAddress, setUsePrimaryAddress] = React.useState(true);
+
+  // Component lifecycle
+  React.useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  // Helper functions
+  const showMessage = (text, type) => {
+    if (!mountedRef.current) return;
+    console.log("showMessage:", text, type);
+    setMessage({ text, type });
+  };
+
+  const formatAsCurrency = (value) => {
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) return '';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(numValue);
+  };
+
+  // Fetch customers on mount with enhanced error handling
+  React.useEffect(() => {
+    const fetchCustomers = async () => {
+      if (!mountedRef.current) return;
+      
+      console.log("Starting customer fetch...");
+      setLoading(true);
+      
+      try {
+        console.log("Making server request...");
+        const response = await new Promise((resolve) => {
+          google.script.run
+            .withSuccessHandler(result => {
+              console.log("Raw server response:", result);
+              // Handle null response
+              if (result === null) {
+                resolve({ success: false, error: 'No response from server' });
+              } else {
+                resolve(result);
+              }
+            })
+            .withFailureHandler(error => {
+              console.error("Server error:", error);
+              resolve({ success: false, error: error.toString() });
+            })
+            .getCustomersForClient();
+        });
+
+        if (!mountedRef.current) {
+          console.log("Component unmounted during fetch, aborting");
+          return;
+        }
+
+        console.log("Processing response:", response);
+        
+        // Safe check for response structure
+        if (response && response.success && Array.isArray(response.data)) {
+          if (validateCustomerResponse(response.data)) {
+            console.log(`Setting ${response.data.length} valid customers`);
+            setCustomers(response.data);
+          } else {
+            console.error("Invalid customer data structure");
+            showMessage('Invalid customer data format received', 'error');
+          }
+        } else {
+          console.error("Invalid or empty response:", response);
+          const errorMsg = (response && response.error) ? response.error : 'Failed to load customers - invalid response format';
+          showMessage(errorMsg, 'error');
+        }
+      } catch (error) {
+        console.error("Customer fetch error:", error);
+        if (mountedRef.current) {
+          showMessage('Failed to load customers: ' + (error.message || 'Unknown error'), 'error');
+        }
+      } finally {
+        if (mountedRef.current) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchCustomers();
+  }, []);
+
+  // Calculate total amount from table items
+  const calculateTotalAmount = (items) => {
+    return items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+  };
+
+  // Update table item and recalc total
+  const updateTableItem = (index, field, value) => {
+    setProjectData(prev => {
+      const updatedItems = [...prev.tableItems];
+      updatedItems[index] = { ...updatedItems[index], [field]: value };
+      
+      // Recalculate amount if needed
+      if (field === 'rate' || field === 'qtyHours') {
+        const rate = parseFloat(updatedItems[index].rate) || 0;
+        const qty = parseFloat(updatedItems[index].qtyHours) || 0;
+        updatedItems[index].amount = (rate * qty).toFixed(2);
+      }
+      
+      const totalAmount = calculateTotalAmount(updatedItems);
+      return { ...prev, tableItems: updatedItems, totalAmount };
+    });
+  };
+
+  // Handle currency input for table item (rate)
+  const handleCurrencyInput = (index, value) => {
+    let numbersOnly = value.replace(/[^0-9.]/g, '');
+    const parts = numbersOnly.split('.');
+    if (parts.length > 2) {
+      numbersOnly = parts[0] + '.' + parts[1];
+    }
+    if (parts.length > 1) {
+      numbersOnly = parts[0] + '.' + parts[1].slice(0, 2);
+    }
+    const numValue = parseFloat(numbersOnly);
+    if (!isNaN(numValue)) {
+      updateTableItem(index, 'rate', numbersOnly);
+    }
+  };
+
+  // Handle quantity input for table item
+  const handleQtyInput = (index, value) => {
+    updateTableItem(index, 'qtyHours', value);
+  };
+
+  // Format phone number
+  const formatPhoneNumber = (value) => {
+    const cleaned = value.replace(/\D/g, '');
+    if (cleaned.length >= 10) {
+      return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6,10)}`;
+    } else if (cleaned.length >= 6) {
+      return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
+    } else if (cleaned.length >= 3) {
+      return `(${cleaned.slice(0,3)}) ${cleaned.slice(3)}`;
+    }
+    return cleaned ? `(${cleaned}` : '';
+  };
+
+  // Form validation
+  const validateCustomerData = () => {
+    if (isNewCustomer) {
+      const required = ['name', 'address', 'city', 'state', 'zip'];
+      const missingRequired = required.some(field => !customerData[field]?.trim());
+      if (missingRequired) return false;
+    } else {
+      if (!selectedCustomerId) return false;
+    }
+    return true;
+  };
+
+  const validateProjectData = () => {
+    const required = ['name', 'scopeOfWork'];
+    const missingRequired = required.some(field => !projectData[field]?.trim());
+    if (missingRequired) return false;
+
+    // Validate service items
+    if (!projectData.tableItems?.some(item => item.itemService.trim() && item.description.trim())) return false;
+    if (projectData.totalAmount <= 0) return false;
+
+    // Validate contingency amount is a valid number
+    if (isNaN(parseFloat(projectData.contingencyAmount))) return false;
+
+    return true;
+  };
+
+  // Form submission
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!mountedRef.current) return;
+
+    setLoading(true);
+    showMessage("Processing estimate, please wait...", "info");
+
+    try {
+      // Step 1: Handle Customer Creation/Selection
+      let customerInfo;
+      
+      if (isNewCustomer) {
+        console.log('Creating new customer...');
+        try {
+          // Log the data being sent
+          const customerPayload = {
+            name: customerData.name,
+            address: customerData.address,
+            city: customerData.city,
+            state: customerData.state,
+            zip: customerData.zip,
+            email: customerData.email || '',
+            phone: customerData.phone ? customerData.phone.replace(/\D/g, '') : ''
+          };
+          console.log('Sending customer payload:', customerPayload);
+
+          const customerResponse = await new Promise((resolve, reject) => {
+            google.script.run
+              .withSuccessHandler(result => {
+                console.log('Raw server response:', result);
+                if (result === null) {
+                  // Server returned null but customer might be created
+                  console.log('Got null response, will fetch latest customers...');
+                  resolve({ success: true, needToFetch: true });
+                } else {
+                  resolve(result);
+                }
+              })
+              .withFailureHandler(error => {
+                console.error('Server error:', error);
+                reject(new Error(error.message || 'Server error'));
+              })
+              // IMPORTANT: Must call createCustomer (NOT createCustomerRecord)
+              .createCustomer(customerPayload);
+          });
+
+          // Handle null response case
+          if (customerResponse.needToFetch) {
+            console.log('Fetching latest customers to find new record...');
+            const latestCustomers = await new Promise(resolve => {
+              google.script.run
+                .withSuccessHandler(resolve)
+                .withFailureHandler(err => resolve({ success: false, error: err.message }))
+                .getCustomersForClient();
+            });
+            
+            if (latestCustomers.success) {
+              // Find our customer by matching name and address
+              const foundCustomer = latestCustomers.data.find(c => 
+                c.name === customerData.name &&
+                c.address === customerData.address
+              );
+              
+              if (foundCustomer) {
+                customerInfo = foundCustomer;
+                console.log('Found newly created customer:', customerInfo);
+              } else {
+                throw new Error('Could not find newly created customer');
+              }
+            } else {
+              throw new Error('Failed to fetch latest customers');
+            }
+          } else {
+            if (!customerResponse.success) {
+              throw new Error(customerResponse.error || 'Failed to create customer');
+            }
+            customerInfo = customerResponse.data;
+            console.log('Created customer with direct response:', customerInfo);
+          }
+          
+        } catch (error) {
+          console.error('Error in customer creation:', error);
+          throw error;
+        }
+      } else {
+        customerInfo = customers.find(c => c.customerId === selectedCustomerId);
+        if (!customerInfo) {
+          throw new Error('Selected customer not found');
+        }
+      }
+
+      // Step 2: Create Project
+      console.log('Creating project for customer:', customerInfo.customerId);
+      const projectResponse = await new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .createProject({
+            customerId: customerInfo.customerId,
+            projectName: projectData.name,
+            siteLocation: projectData.siteLocation || '',
+            siteNotes: projectData.siteNotes || ''
+          });
+      });
+
+      if (!projectResponse || !projectResponse.success) {
+        throw new Error(projectResponse?.error || 'Failed to create project');
+      }
+      console.log('Created project:', projectResponse.data);
+
+      // Step 3: Format table items for estimate
+      const formattedTableItems = projectData.tableItems.map(item => ({
+        ...item,
+        rate: formatAsCurrency(parseFloat(item.rate)),
+        amount: formatAsCurrency(parseFloat(item.amount))
+      }));
+
+      // Step 4: Create estimate with proper site location handling
+      const estimateData = {
+        customerId: customerInfo.customerId,
+        projectId: projectResponse.data.projectId,
+        projectFolderId: projectResponse.data.folders.estimates,
+        customerName: customerInfo.name,
+        customerAddress: customerInfo.address,
+        customerCity: customerInfo.city,
+        customerState: customerInfo.state,
+        customerZip: customerInfo.zip,
+        customerEmail: customerInfo.email,
+        customerPhone: customerInfo.phone,
+        projectName: projectData.name,
+        // Use site location based on selection
+        siteLocationAddress: usePrimaryAddress ? customerInfo.address : projectData.siteLocationAddress,
+        siteLocationCity: usePrimaryAddress ? customerInfo.city : projectData.siteLocationCity,
+        siteLocationState: usePrimaryAddress ? customerInfo.state : projectData.siteLocationState,
+        siteLocationZip: usePrimaryAddress ? customerInfo.zip : projectData.siteLocationZip,
+        siteNotes: projectData.siteNotes || '',
+        scopeOfWork: projectData.scopeOfWork,
+        tableItems: formattedTableItems,
+        totalAmount: projectData.totalAmount,
+        contingencyAmount: parseFloat(projectData.contingencyAmount) || 0 // Ensure it's a number
+      };
+
+      console.log('Creating estimate with data:', estimateData);
+      const estimateResponse = await new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .createAndSaveEstimate(estimateData);
+      });
+
+      if (!estimateResponse || !estimateResponse.success) {
+        throw new Error(estimateResponse?.error || 'Failed to create estimate');
+      }
+
+      // Success handling
+      showMessage('✅ Estimate created successfully!', 'success');
+      setDocumentGenerated(true);
+
+      if (estimateResponse.data?.docUrl) {
+        setPreviewUrl(estimateResponse.data.docUrl);
+        window.open(estimateResponse.data.docUrl, '_blank');
+      }
+
+      if (estimateResponse.data?.estimateId) {
+        setEstimateId(estimateResponse.data.estimateId);
+      }
+
+      setTimeout(() => {
+        if (mountedRef.current) resetForm();
+      }, 2000);
+
+    } catch (error) {
+      console.error("Error in handleSubmit:", error);
+      if (mountedRef.current) {
+        showMessage(error.message || 'Failed to create estimate', 'error');
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  };
+
+  // Reset form state
+  const resetForm = () => {
+    setStep('CUSTOMER_TYPE');
+    setMessage({ text: '', type: '' });
+    setLoading(false);
+    setIsNewCustomer(false);
+    setSelectedCustomerId('');
+    setCustomerData({
+      name: '', address: '', city: '', state: '', zip: '',
+      email: '', phone: ''
+    });
+    setProjectData({
+      name: '', siteLocationAddress: '', siteLocationCity: '', siteLocationState: '', siteLocationZip: '', scopeOfWork: '',
+      tableItems: [{ itemService: '', description: '', qtyHours: '', rate: '', amount: '' }],
+      totalAmount: 0,
+      contingencyAmount: 0
+    });
+    setPreviewUrl('');
+    setDocumentGenerated(false);
+    setEstimateId('');
+  };
+
+  // Add handleCustomerDetailsNext function
+  const handleCustomerDetailsNext = () => {
+    if (validateCustomerData()) {
+      setStep('SITE_LOCATION');
+    } else {
+      showMessage('Please fill in all required fields correctly', 'error');
+    }
+  };
+
+  // Add currency input handler for contingency
+  const handleContingencyInput = (value) => {
+    // Use same logic as rate input
+    let numbersOnly = value.replace(/[^0-9.]/g, '');
+    const parts = numbersOnly.split('.');
+    if (parts.length > 2) {
+      numbersOnly = parts[0] + '.' + parts[1];
+    }
+    if (parts.length > 1) {
+      numbersOnly = parts[0] + '.' + parts[1].slice(0, 2);
+    }
+    const numValue = parseFloat(numbersOnly);
+    if (!isNaN(numValue)) {
+      setProjectData(prev => ({
+        ...prev,
+        contingencyAmount: numbersOnly
+      }));
+    }
+  };
+
+  // Render functions for the steps
+  const renderCustomerTypeStep = () => {
+    return React.createElement('div', { className: 'space-y-4' },
+      React.createElement('h3', { className: 'text-lg font-medium' }, 'Select Customer Type'),
+      React.createElement('div', { className: 'space-y-2' },
+        React.createElement('button', {
+          onClick: () => { setIsNewCustomer(false); setStep('CUSTOMER_DETAILS'); },
+          className: 'w-full p-4 text-left border rounded hover:bg-gray-50'
+        }, 'Existing Customer'),
+        React.createElement('button', {
+          onClick: () => { setIsNewCustomer(true); setStep('CUSTOMER_DETAILS'); },
+          className: 'w-full p-4 text-left border rounded hover:bg-gray-50'
+        }, 'New Customer')
+      )
+    );
+  };
+
+  const renderCustomerDetailsStep = () => {
+    if (isNewCustomer) {
+      return React.createElement('div', { className: 'space-y-4' },
+        React.createElement('h3', { className: 'text-lg font-medium' }, 'Customer Information'),
+        // Customer Name
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Customer Name'),
+          React.createElement('input', {
+            type: 'text',
+            value: customerData.name,
+            onChange: e => setCustomerData(prev => ({ ...prev, name: e.target.value })),
+            className: 'w-full p-2 border rounded',
+            required: true
+          })
+        ),
+        // Address
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Address'),
+          React.createElement('input', {
+            type: 'text',
+            value: customerData.address,
+            onChange: e => setCustomerData(prev => ({ ...prev, address: e.target.value })),
+            className: 'w-full p-2 border rounded',
+            required: true
+          })
+        ),
+        // City, State, ZIP
+        React.createElement('div', { className: 'grid grid-cols-3 gap-4' },
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'City'),
+            React.createElement('input', {
+              type: 'text',
+              value: customerData.city,
+              onChange: e => setCustomerData(prev => ({ ...prev, city: e.target.value })),
+              className: 'w-full p-2 border rounded',
+              required: true
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'State'),
+            React.createElement('input', {
+              type: 'text',
+              value: customerData.state,
+              onChange: e => setCustomerData(prev => ({ ...prev, state: e.target.value })),
+              className: 'w-full p-2 border rounded',
+              maxLength: 2,
+              required: true
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'ZIP'),
+            React.createElement('input', {
+              type: 'text',
+              value: customerData.zip,
+              onChange: e => setCustomerData(prev => ({
+                ...prev,
+                zip: e.target.value.replace(/\D/g, '').slice(0, 5)
+              })),
+              className: 'w-full p-2 border rounded',
+              maxLength: 5,
+              required: true
+            })
+          )
+        ),
+        // Email and Phone
+        React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Email'),
+            React.createElement('input', {
+              type: 'email',
+              value: customerData.email,
+              onChange: e => setCustomerData(prev => ({ ...prev, email: e.target.value })),
+              className: 'w-full p-2 border rounded'
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Phone'),
+            React.createElement('input', {
+              type: 'tel',
+              value: customerData.phone,
+              onChange: e => setCustomerData(prev => ({
+                ...prev,
+                phone: formatPhoneNumber(e.target.value)
+              })),
+              className: 'w-full p-2 border rounded',
+              placeholder: '(555) 555-5555'
+            })
+          )
+        ),
+        // Navigation buttons
+        React.createElement('div', { className: 'flex space-x-4 pt-6' },
+          React.createElement('button', {
+            onClick: () => setStep('CUSTOMER_TYPE'),
+            className: 'flex-1 p-3 border rounded hover:bg-gray-50'
+          }, 'Back'),
+          React.createElement('button', {
+            onClick: handleCustomerDetailsNext,  // Use the new function
+            className: 'flex-1 p-3 bg-blue-600 text-white rounded hover:bg-blue-700'
+          }, 'Next')
+        )
+      );
+    } else {
+      // Existing customer selection
+      return React.createElement('div', { className: 'space-y-4' },
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Select Customer'),
+          React.createElement('select', {
+            value: selectedCustomerId,
+            onChange: e => setSelectedCustomerId(e.target.value),
+            className: 'w-full p-2 border rounded',
+            required: true
+          },
+            React.createElement('option', { value: '' }, 'Select Customer'),
+            customers.map(customer =>
+              React.createElement('option', {
+                key: customer.customerId,
+                value: customer.customerId
+              }, `${customer.name} (${customer.customerId})`)
+            )
+          )
+        ),
+        React.createElement('div', { className: 'flex space-x-4 pt-6' },
+          React.createElement('button', {
+            onClick: () => setStep('CUSTOMER_TYPE'),
+            className: 'flex-1 p-3 border rounded hover:bg-gray-50'
+          }, 'Back'),
+          React.createElement('button', {
+            onClick: handleCustomerDetailsNext,
+            disabled: !selectedCustomerId,
+            className: `flex-1 p-3 rounded text-white ${!selectedCustomerId ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`
+          }, 'Next')
+        )
+      );
+    }
+  };
+
+  const renderSiteLocationStep = () => {
+    const customerAddr = isNewCustomer ? customerData : customers.find(c => c.customerId === selectedCustomerId);
+    
+    return React.createElement('div', { className: 'space-y-4' },
+      React.createElement('h3', { className: 'text-lg font-medium' }, 'Project Site Location'),
+      
+      // Radio selection for address type
+      React.createElement('div', { className: 'space-y-2' },
+        React.createElement('div', { className: 'flex items-center space-x-2' },
+          React.createElement('input', {
+            type: 'radio',
+            id: 'primaryAddress',
+            checked: usePrimaryAddress,
+            onChange: () => setUsePrimaryAddress(true),
+            className: 'form-radio'
+          }),
+          React.createElement('label', { htmlFor: 'primaryAddress' }, 'Same as Customer Address')
+        ),
+        React.createElement('div', { className: 'flex items-center space-x-2' },
+          React.createElement('input', {
+            type: 'radio',
+            id: 'differentAddress',
+            checked: !usePrimaryAddress,
+            onChange: () => setUsePrimaryAddress(false),
+            className: 'form-radio'
+          }),
+          React.createElement('label', { htmlFor: 'differentAddress' }, 'Different Location')
+        )
+      ),
+
+      // Show current customer address
+      usePrimaryAddress && React.createElement('div', { className: 'bg-gray-50 p-4 rounded' },
+        React.createElement('p', { className: 'font-medium' }, 'Customer Address:'),
+        React.createElement('p', null, customerAddr.address),
+        React.createElement('p', null, `${customerAddr.city}, ${customerAddr.state} ${customerAddr.zip}`)
+      ),
+
+      // Show site location form if different address selected
+      !usePrimaryAddress && React.createElement('div', { className: 'space-y-4' },
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Site Address'),
+          React.createElement('input', {
+            type: 'text',
+            value: projectData.siteLocationAddress,
+            onChange: e => setProjectData(prev => ({ ...prev, siteLocationAddress: e.target.value })),
+            className: 'w-full p-2 border rounded'
+          })
+        ),
+        React.createElement('div', { className: 'grid grid-cols-3 gap-4' },
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'City'),
+            React.createElement('input', {
+              type: 'text',
+              value: projectData.siteLocationCity,
+              onChange: e => setProjectData(prev => ({ ...prev, siteLocationCity: e.target.value })),
+              className: 'w-full p-2 border rounded'
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'State'),
+            React.createElement('input', {
+              type: 'text',
+              value: projectData.siteLocationState,
+              onChange: e => setProjectData(prev => ({ ...prev, siteLocationState: e.target.value })),
+              className: 'w-full p-2 border rounded',
+              maxLength: 2
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'ZIP'),
+            React.createElement('input', {
+              type: 'text',
+              value: projectData.siteLocationZip,
+              onChange: e => setProjectData(prev => ({
+                ...prev,
+                siteLocationZip: e.target.value.replace(/\D/g, '').slice(0, 5)
+              })),
+              className: 'w-full p-2 border rounded',
+              maxLength: 5
+            })
+          )
+        )
+      ),
+
+      // Navigation buttons
+      React.createElement('div', { className: 'flex space-x-4 pt-6' },
+        React.createElement('button', {
+          onClick: () => setStep('CUSTOMER_DETAILS'),
+          className: 'flex-1 p-3 border rounded hover:bg-gray-50'
+        }, 'Back'),
+        React.createElement('button', {
+          onClick: handleSiteLocationNext,
+          className: 'flex-1 p-3 bg-blue-600 text-white rounded hover:bg-blue-700'
+        }, 'Next')
+      )
+    );
+  };
+
+  const handleSiteLocationNext = () => {
+    if (usePrimaryAddress) {
+      // If using primary address, copy customer address to site location
+      const customerAddr = isNewCustomer ? customerData : customers.find(c => c.customerId === selectedCustomerId);
+      setProjectData(prev => ({
+        ...prev,
+        siteLocationAddress: customerAddr.address || '',
+        siteLocationCity: customerAddr.city || '',
+        siteLocationState: customerAddr.state || '',
+        siteLocationZip: customerAddr.zip || ''
+      }));
+    }
+    // Site location data already in projectData if not using primary address
+    setStep('PROJECT_DETAILS');
+  };
+
+  const renderProjectDetailsStep = () => {
+    return React.createElement('div', { className: 'space-y-4' },
+      // Project Name
+      React.createElement('div', null,
+        React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Project Name'),
+        React.createElement('input', {
+          type: 'text',
+          value: projectData.name,
+          onChange: e => setProjectData(prev => ({ ...prev, name: e.target.value })),
+          className: 'w-full p-2 border rounded',
+          required: true
+        })
+      ),
+
+      // Site Notes
+      React.createElement('div', null,
+        React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Site Notes'),
+        React.createElement('textarea', {
+          value: projectData.siteNotes,
+          onChange: e => setProjectData(prev => ({ ...prev, siteNotes: e.target.value })),
+          className: 'w-full p-2 border rounded h-20',
+          placeholder: 'Any special instructions or notes about the site'
+        })
+      ),
+
+      // Scope of Work
+      React.createElement('div', null,
+        React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Scope of Work'),
+        React.createElement('textarea', {
+          value: projectData.scopeOfWork,
+          onChange: e => setProjectData(prev => ({ ...prev, scopeOfWork: e.target.value })),
+          className: 'w-full p-2 border rounded h-32',
+          required: true,
+          placeholder: 'Describe the overall scope of work'
+        })
+      ),
+
+      // Table Items for Services
+      React.createElement('div', { className: 'space-y-2' },
+        React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Service Items'),
+        projectData.tableItems.map((item, index) =>
+          React.createElement('div', { key: index, className: 'border p-2 rounded space-y-2' },
+            // Service
+            React.createElement('div', null,
+              React.createElement('label', { className: 'block text-sm font-medium' }, 'Service'),
+              React.createElement('input', {
+                type: 'text',
+                value: item.itemService,
+                onChange: e => updateTableItem(index, 'itemService', e.target.value),
+                className: 'w-full p-2 border rounded'
+              })
+            ),
+            // Description
+            React.createElement('div', null,
+              React.createElement('label', { className: 'block text-sm font-medium' }, 'Description'),
+              React.createElement('input', {
+                type: 'text',
+                value: item.description,
+                onChange: e => updateTableItem(index, 'description', e.target.value),
+                className: 'w-full p-2 border rounded'
+              })
+            ),
+            // Qty/Hours and Rate
+            React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
+              React.createElement('div', null,
+                React.createElement('label', { className: 'block text-sm font-medium' }, 'Qty/Hours'),
+                React.createElement('input', {
+                  type: 'number',
+                  value: item.qtyHours,
+                  onChange: e => handleQtyInput(index, e.target.value),
+                  className: 'w-full p-2 border rounded'
+                })
+              ),
+              React.createElement('div', null,
+                React.createElement('label', { className: 'block text-sm font-medium' }, 'Rate'),
+                React.createElement('input', {
+                  type: 'text',
+                  value: item.rate,
+                  onChange: e => handleCurrencyInput(index, e.target.value),
+                  className: 'w-full p-2 border rounded',
+                  placeholder: '0.00'
+                })
+              )
+            ),
+            // Amount
+            React.createElement('div', null,
+              React.createElement('span', { className: 'text-sm text-gray-500' }, 
+                `Amount: ${formatAsCurrency(item.amount)}`)
+            ),
+            // Remove button
+            index > 0 && React.createElement('button', {
+              onClick: () => {
+                setProjectData(prev => {
+                  const updatedItems = prev.tableItems.filter((_, i) => i !== index);
+                  return { ...prev, tableItems: updatedItems, totalAmount: calculateTotalAmount(updatedItems) };
+                });
+              },
+              className: 'p-2 text-red-600 hover:bg-red-50 rounded'
+            }, 'Remove')
+          )
+        ),
+        // Add new item button
+        React.createElement('button', {
+          onClick: () => {
+            setProjectData(prev => ({
+              ...prev,
+              tableItems: [...prev.tableItems, { itemService: '', description: '', qtyHours: '', rate: '', amount: '' }]
+            }));
+          },
+          className: 'w-full p-2 border border-dashed rounded hover:bg-gray-50'
+        }, '+ Add Service Item')
+      ),
+
+      // Totals and Contingency
+      React.createElement('div', { className: 'space-y-4' },
+        React.createElement('div', { className: 'text-lg font-medium' },
+          `Total Amount: ${formatAsCurrency(projectData.totalAmount)}`
+        ),
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Contingency Amount'),
+          React.createElement('input', {
+            type: 'text',
+            value: projectData.contingencyAmount,
+            onChange: e => handleContingencyInput(e.target.value),
+            className: 'w-full p-2 border rounded',
+            placeholder: '0.00'
+          })
+        )
+      ),
+
+      // Navigation buttons
+      React.createElement('div', { className: 'flex space-x-4 pt-6' },
+        React.createElement('button', {
+          onClick: () => setStep('SITE_LOCATION'),
+          className: 'flex-1 p-3 border rounded hover:bg-gray-50'
+        }, 'Back'),
+        React.createElement('button', {
+          onClick: handleSubmit,
+          disabled: loading || !validateProjectData(),
+          className: `flex-1 p-3 rounded text-white ${loading || !validateProjectData() ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`
+        }, loading ? 'Generating...' : 'Generate Estimate')
+      )
+    );
+  };
+
+  // Update main render to include new step
+  return React.createElement('div', { className: 'max-w-2xl mx-auto p-4' },
+    React.createElement('div', { className: 'bg-white shadow rounded-lg p-6' },
+      React.createElement('h2', { className: 'text-2xl font-bold mb-4' }, 'Create Estimate'),
+      message.text && React.createElement('div', {
+        className: `mb-4 p-4 rounded ${
+          message.type === 'success' ? 'bg-green-100 text-green-700' :
+          message.type === 'info' ? 'bg-blue-100 text-blue-700' :
+          'bg-red-100 text-red-700'
+        }`
+      }, message.text),
+      step === 'CUSTOMER_TYPE'
+        ? renderCustomerTypeStep()
+        : step === 'CUSTOMER_DETAILS'
+          ? renderCustomerDetailsStep()
+          : step === 'SITE_LOCATION'
+            ? renderSiteLocationStep()
+            : renderProjectDetailsStep()
+    )
+  );
+};
+
+window.EstimateCreator = EstimateCreator;
+</script>

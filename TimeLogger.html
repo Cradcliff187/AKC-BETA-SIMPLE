@@ -1,0 +1,240 @@
+<script>
+const TimeLogger = () => {
+  const [date, setDate] = React.useState(() => {
+    try {
+      return google.script.run.withSuccessHandler(d => setDate(d)).getTodayDate();
+    } catch (e) {
+      return new Date().toISOString().split('T')[0]; // Fallback if server call fails
+    }
+  });
+  const [startTime, setStartTime] = React.useState('');
+  const [endTime, setEndTime] = React.useState('');
+  const [projects, setProjects] = React.useState([]);
+  const [selectedProject, setSelectedProject] = React.useState('');
+  const [forUserEmail, setForUserEmail] = React.useState('');
+  const [message, setMessage] = React.useState({ text: '', type: '' });
+  const [loading, setLoading] = React.useState(false);
+  const [hours, setHours] = React.useState(0);
+  const mountedRef = React.useRef(true);
+
+  React.useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  // Fetch projects on mount
+  React.useEffect(() => {
+    const fetchProjects = async () => {
+      if (!mountedRef.current) return;
+      try {
+        const response = await new Promise(resolve => {
+          google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(err => resolve({ success: false, error: err.message }))
+            .getProjects();
+        });
+        if (mountedRef.current) {
+          if (response.success) {
+            setProjects(response.data);
+          } else {
+            showMessage(response.error || 'Failed to load projects', 'error');
+          }
+        }
+      } catch (error) {
+        if (mountedRef.current) {
+          showMessage('Failed to load projects', 'error');
+        }
+      }
+    };
+    fetchProjects();
+  }, []);
+
+  // Calculate hours whenever date, startTime, or endTime changes
+  React.useEffect(() => {
+    if (startTime && endTime) {
+      const start = new Date(`${date} ${startTime}`);
+      const end = new Date(`${date} ${endTime}`);
+      const diff = (end - start) / (1000 * 60 * 60);
+      if (mountedRef.current) {
+        setHours(diff > 0 ? diff : 0);
+      }
+    }
+  }, [date, startTime, endTime]);
+
+  const showMessage = (text, type) => {
+    if (!mountedRef.current) return;
+    setMessage({ text, type });
+  };
+
+  const resetForm = () => {
+    if (!mountedRef.current) return;
+    google.script.run
+      .withSuccessHandler(newDate => {
+        if (mountedRef.current) {
+          setDate(newDate);
+          setStartTime('');
+          setEndTime('');
+          setSelectedProject('');
+          setForUserEmail('');
+          setMessage({ text: '', type: '' });
+          setHours(0);
+        }
+      })
+      .getTodayDate();
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!mountedRef.current) return;
+
+    setLoading(true);
+    try {
+      const response = await new Promise(resolve => {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(err => resolve({ success: false, error: err.message }))
+          .submitTimeLog({
+            date,
+            startTime,
+            endTime,
+            projectId: selectedProject,
+            forUserEmail // pass new field
+          });
+      });
+      if (!mountedRef.current) return;
+      if (response.success) {
+        showMessage(
+          `Time logged successfully! ${response.data.hours.toFixed(2)} hours recorded.`,
+          'success'
+        );
+        setTimeout(() => {
+          if (mountedRef.current) resetForm();
+        }, 2000);
+      } else {
+        showMessage(response.error || 'Failed to log time', 'error');
+      }
+    } catch (error) {
+      if (mountedRef.current) {
+        showMessage('Failed to log time', 'error');
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  };
+
+  const generateTimeOptions = () => {
+    const options = [];
+    for (let hour = 0; hour < 24; hour++) {
+      for (let minute = 0; minute < 60; minute += 15) {
+        const hourStr = hour.toString().padStart(2, '0');
+        const minStr = minute.toString().padStart(2, '0');
+        const time = `${hourStr}:${minStr}`;
+        const label = new Date(`2000-01-01 ${time}`).toLocaleTimeString([], {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+        options.push(React.createElement('option', { key: time, value: time }, label));
+      }
+    }
+    return options;
+  };
+
+  return React.createElement('div', { className: 'max-w-2xl mx-auto p-4' },
+    React.createElement('div', { className: 'bg-white shadow rounded-lg p-6' },
+      React.createElement('h2', { className: 'text-2xl font-bold mb-4' }, 'Log Time'),
+
+      message.text && React.createElement('div', {
+        className: `mb-4 p-4 rounded ${
+          message.type === 'success'
+            ? 'bg-green-100 text-green-700'
+            : 'bg-red-100 text-red-700'
+        }`
+      }, message.text),
+
+      React.createElement('form', { onSubmit: handleSubmit, className: 'space-y-4' },
+        // Date
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Date:'),
+          React.createElement('input', {
+            type: 'date',
+            value: date,
+            onChange: e => setDate(e.target.value),
+            className: 'w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500',
+            required: true
+          })
+        ),
+        // Start / End
+        React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
+          // Start
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Start Time:'),
+            React.createElement('select', {
+              value: startTime,
+              onChange: e => setStartTime(e.target.value),
+              className: 'w-full p-2 border rounded',
+              required: true
+            },
+              React.createElement('option', { value: '' }, 'Select Time'),
+              generateTimeOptions()
+            )
+          ),
+          // End
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'End Time:'),
+            React.createElement('select', {
+              value: endTime,
+              onChange: e => setEndTime(e.target.value),
+              className: 'w-full p-2 border rounded',
+              required: true
+            },
+              React.createElement('option', { value: '' }, 'Select Time'),
+              generateTimeOptions()
+            )
+          )
+        ),
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Project:'),
+          React.createElement('select', {
+            value: selectedProject,
+            onChange: e => setSelectedProject(e.target.value),
+            className: 'w-full p-2 border rounded',
+            required: true
+          },
+            React.createElement('option', { value: '' }, 'Select Project'),
+            projects.map(project =>
+              React.createElement('option', {
+                key: project.id,
+                value: project.id
+              }, 
+                `${project.projectId} - ${project.name}${project.jobId ? ` (Job: ${project.jobId})` : ''} - ${project.status}`
+              )
+            )
+          )
+        ),
+        // ForUserEmail
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'For Which Employee Email (optional):'),
+          React.createElement('input', {
+            type: 'email',
+            placeholder: 'If blank, logs for yourself',
+            value: forUserEmail,
+            onChange: e => setForUserEmail(e.target.value),
+            className: 'w-full p-2 border rounded'
+          })
+        ),
+        // Submit
+        React.createElement('button', {
+          type: 'submit',
+          disabled: loading,
+          className: `w-full p-3 rounded text-white font-medium ${
+            loading ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
+          }`
+        }, loading ? 'Logging...' : hours > 0 ? `Log Time (${hours.toFixed(2)} hrs)` : 'Log Time')
+      )
+    )
+  );
+};
+</script>

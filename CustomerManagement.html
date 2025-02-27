@@ -1,0 +1,504 @@
+<script>
+const CustomerManagement = () => {
+  // State Management
+  const [customers, setCustomers] = React.useState([]);
+  const [filteredCustomers, setFilteredCustomers] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [message, setMessage] = React.useState({ text: '', type: '' });
+  const [selectedCustomer, setSelectedCustomer] = React.useState(null);
+  const [viewMode, setViewMode] = React.useState('list'); // 'list', 'details', 'documents'
+  
+  // Enhanced Filtering State
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const [statusFilter, setStatusFilter] = React.useState('All');
+  const [valueRangeFilter, setValueRangeFilter] = React.useState({
+    min: null,
+    max: null
+  });
+
+  // Analytics State
+  const [analytics, setAnalytics] = React.useState({
+    totalCustomers: 0,
+    activeCustomers: 0,
+    totalRevenue: 0,
+    averageProjectValue: 0,
+    customerLifetimeValue: 0,
+    topCustomers: [],
+    recentActivity: [],
+    projectTrends: [],
+    revenueTrends: []
+  });
+
+  // Document Management State
+  const [customerDocuments, setCustomerDocuments] = React.useState([]);
+  const [selectedDocument, setSelectedDocument] = React.useState(null);
+
+  const mountedRef = React.useRef(true);
+
+  // Message handling
+  const showMessage = (text, type) => {
+    if (!mountedRef.current) return;
+    setMessage({ text, type });
+    
+    // Auto-clear message after 5 seconds
+    setTimeout(() => {
+      if (mountedRef.current) {
+        setMessage({ text: '', type: '' });
+      }
+    }, 5000);
+  };
+
+  // === Lifecycle Management ===
+  React.useEffect(() => {
+    mountedRef.current = true;
+    fetchCustomers();
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  // === Data Fetching ===
+  const fetchCustomers = async () => {
+    setLoading(true);
+    try {
+      const response = await new Promise(resolve => {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(err => resolve({ success: false, error: err.message }))
+          .getCustomersForClient();
+      });
+
+      if (!mountedRef.current) return;
+
+      if (response.success) {
+        const enrichedCustomers = processCustomerData(response.data);
+        setCustomers(enrichedCustomers);
+        setFilteredCustomers(enrichedCustomers);
+        calculateAnalytics(enrichedCustomers);
+      } else {
+        showMessage(response.error || 'Failed to load customers', 'error');
+      }
+    } catch (error) {
+      if (mountedRef.current) {
+        showMessage('Failed to load customers', 'error');
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  };
+
+  // === Data Processing ===
+  // Helper functions for calculations
+  const calculateTotalRevenue = (projects) => {
+    if (!projects) return 0;
+    return projects.reduce((sum, project) => sum + (project.value || 0), 0);
+  };
+
+  const calculateAverageProjectValue = (projects) => {
+    if (!projects || projects.length === 0) return 0;
+    return calculateTotalRevenue(projects) / projects.length;
+  };
+
+  const findLastActivityDate = (projects) => {
+    if (!projects || projects.length === 0) return null;
+    return new Date().toISOString(); // Placeholder - we'll need actual activity data
+  };
+
+  const calculateEstimateConversionRate = (projects) => {
+    if (!projects || projects.length === 0) return 0;
+    // Placeholder - we'll need estimates data
+    return (projects.filter(p => p.status === 'COMPLETED').length / projects.length) * 100;
+  };
+
+  const calculateProjectCompletionRate = (projects) => {
+    if (!projects || projects.length === 0) return 0;
+    return (projects.filter(p => p.status === 'COMPLETED').length / projects.length) * 100;
+  };
+
+  const processCustomerData = (rawCustomers) => {
+    return rawCustomers.map(customer => ({
+      ...customer,
+      metrics: {
+        totalProjects: customer.projects?.length || 0,
+        activeProjects: customer.projects?.filter(p => p.status === 'IN_PROGRESS').length || 0,
+        totalRevenue: calculateTotalRevenue(customer.projects),
+        averageProjectValue: calculateAverageProjectValue(customer.projects),
+        lastActivityDate: findLastActivityDate(customer.projects),
+        estimateConversionRate: calculateEstimateConversionRate(customer.projects),
+        projectCompletionRate: calculateProjectCompletionRate(customer.projects)
+      }
+    }));
+  };
+
+  const calculateAnalytics = (customers) => {
+    const totalRevenue = customers.reduce((sum, c) => sum + (c.metrics?.totalRevenue || 0), 0);
+    const totalProjects = customers.reduce((sum, c) => sum + (c.metrics?.totalProjects || 0), 0);
+    
+    setAnalytics({
+      totalCustomers: customers.length,
+      activeCustomers: customers.filter(c => c.metrics?.activeProjects > 0).length,
+      totalRevenue,
+      averageProjectValue: totalProjects ? totalRevenue / totalProjects : 0,
+      customerLifetimeValue: customers.length ? totalRevenue / customers.length : 0,
+      topCustomers: [...customers]
+        .sort((a, b) => (b.metrics?.totalRevenue || 0) - (a.metrics?.totalRevenue || 0))
+        .slice(0, 5)
+    });
+  };
+
+  // === Export Functionality ===
+  const exportCustomerData = () => {
+    const exportData = filteredCustomers.map(customer => ({
+      'Customer ID': customer.customerId,
+      'Name': customer.name,
+      'Email': customer.email,
+      'Phone': customer.phone,
+      'Total Projects': customer.metrics.totalProjects,
+      'Active Projects': customer.metrics.activeProjects,
+      'Total Revenue': customer.metrics.totalRevenue,
+      'Average Project Value': customer.metrics.averageProjectValue,
+      'Last Activity': customer.metrics.lastActivityDate
+    }));
+
+    // Convert to CSV
+    const headers = Object.keys(exportData[0]);
+    const csvContent = [
+      headers.join(','),
+      ...exportData.map(row => 
+        headers.map(header => 
+          JSON.stringify(row[header] || '')
+        ).join(',')
+      )
+    ].join('\n');
+
+    // Create download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `customer_data_${new Date().toISOString()}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  // === Document Management ===
+  // Render Customer Details
+  const renderCustomerDetails = () => {
+    if (!selectedCustomer) return null;
+
+    return React.createElement('div', { className: 'space-y-4' },
+      // Header with back button
+      React.createElement('div', { className: 'flex justify-between items-center' },
+        React.createElement('h3', { className: 'text-xl font-bold' }, 
+          `${selectedCustomer.name} Details`
+        ),
+        React.createElement('button', {
+          onClick: () => {
+            setSelectedCustomer(null);
+            setViewMode('list');
+          },
+          className: 'text-blue-600 hover:text-blue-800'
+        }, '← Back to List')
+      ),
+
+      // Customer Information Card
+      React.createElement('div', { className: 'bg-white p-4 rounded-lg shadow' },
+        React.createElement('h4', { className: 'font-semibold mb-2' }, 'Contact Information'),
+        React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
+          React.createElement('div', null,
+            React.createElement('p', { className: 'text-sm text-gray-600' }, 'Email:'),
+            React.createElement('p', null, selectedCustomer.email || 'N/A')
+          ),
+          React.createElement('div', null,
+            React.createElement('p', { className: 'text-sm text-gray-600' }, 'Phone:'),
+            React.createElement('p', null, selectedCustomer.phone || 'N/A')
+          ),
+          React.createElement('div', null,
+            React.createElement('p', { className: 'text-sm text-gray-600' }, 'Address:'),
+            React.createElement('p', null, selectedCustomer.address || 'N/A')
+          ),
+          React.createElement('div', null,
+            React.createElement('p', { className: 'text-sm text-gray-600' }, 'Status:'),
+            React.createElement('p', null, selectedCustomer.status || 'Unknown')
+          )
+        )
+      ),
+
+      // Metrics Card
+      React.createElement('div', { className: 'bg-white p-4 rounded-lg shadow' },
+        React.createElement('h4', { className: 'font-semibold mb-2' }, 'Customer Metrics'),
+        React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
+          React.createElement('div', null,
+            React.createElement('p', { className: 'text-sm text-gray-600' }, 'Total Projects:'),
+            React.createElement('p', { className: 'text-lg font-semibold' }, 
+              selectedCustomer.metrics?.totalProjects || 0
+            )
+          ),
+          React.createElement('div', null,
+            React.createElement('p', { className: 'text-sm text-gray-600' }, 'Active Projects:'),
+            React.createElement('p', { className: 'text-lg font-semibold' }, 
+              selectedCustomer.metrics?.activeProjects || 0
+            )
+          ),
+          React.createElement('div', null,
+            React.createElement('p', { className: 'text-sm text-gray-600' }, 'Total Revenue:'),
+            React.createElement('p', { className: 'text-lg font-semibold' }, 
+              new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD'
+              }).format(selectedCustomer.metrics?.totalRevenue || 0)
+            )
+          ),
+          React.createElement('div', null,
+            React.createElement('p', { className: 'text-sm text-gray-600' }, 'Average Project Value:'),
+            React.createElement('p', { className: 'text-lg font-semibold' }, 
+              new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD'
+              }).format(selectedCustomer.metrics?.averageProjectValue || 0)
+            )
+          )
+        )
+      ),
+
+      // Actions Card
+      React.createElement('div', { className: 'bg-white p-4 rounded-lg shadow' },
+        React.createElement('h4', { className: 'font-semibold mb-2' }, 'Actions'),
+        React.createElement('div', { className: 'flex space-x-4' },
+          React.createElement('button', {
+            onClick: () => handleSendEstimate(selectedCustomer.customerId),
+            className: 'p-2 bg-blue-600 text-white rounded hover:bg-blue-700'
+          }, 'Send Estimate'),
+          React.createElement('button', {
+            onClick: () => {/* Handle edit */},
+            className: 'p-2 bg-gray-600 text-white rounded hover:bg-gray-700'
+          }, 'Edit Customer')
+        )
+      )
+    );
+  };
+
+  const handleSendEstimate = async (estimateId, customerId) => {
+    setLoading(true);
+    try {
+      const response = await new Promise(resolve => {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(err => resolve({ success: false, error: err.message }))
+          .sendEstimateToCustomer({ estimateId, customerId });
+      });
+
+      if (response.success) {
+        showMessage('Estimate sent successfully', 'success');
+      } else {
+        showMessage(response.error || 'Failed to send estimate', 'error');
+      }
+    } catch (error) {
+      showMessage('Failed to send estimate', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // === UI Components ===
+  const renderDashboard = () => {
+    return React.createElement('div', { className: 'space-y-4' },
+      // Summary Cards Row
+      React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-4 gap-4' },
+        React.createElement('div', { className: 'bg-white p-4 rounded-lg shadow' },
+          React.createElement('div', { className: 'text-lg font-semibold' }, 'Total Customers'),
+          React.createElement('div', { className: 'text-2xl' }, analytics.totalCustomers)
+        ),
+        React.createElement('div', { className: 'bg-white p-4 rounded-lg shadow' },
+          React.createElement('div', { className: 'text-lg font-semibold' }, 'Active Customers'),
+          React.createElement('div', { className: 'text-2xl' }, analytics.activeCustomers)
+        ),
+        React.createElement('div', { className: 'bg-white p-4 rounded-lg shadow' },
+          React.createElement('div', { className: 'text-lg font-semibold' }, 'Total Revenue'),
+          React.createElement('div', { className: 'text-2xl' }, 
+            new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
+              .format(analytics.totalRevenue)
+          )
+        ),
+        React.createElement('div', { className: 'bg-white p-4 rounded-lg shadow' },
+          React.createElement('div', { className: 'text-lg font-semibold' }, 'Avg Project Value'),
+          React.createElement('div', { className: 'text-2xl' }, 
+            new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
+              .format(analytics.averageProjectValue)
+          )
+        )
+      ),
+
+      // Top Customers Table
+      React.createElement('div', { className: 'bg-white rounded-lg shadow' },
+        React.createElement('div', { className: 'p-4 border-b' },
+          React.createElement('h3', { className: 'text-lg font-semibold' }, 'Top Customers')
+        ),
+        React.createElement('div', { className: 'p-4' },
+          React.createElement('table', { className: 'w-full' },
+            React.createElement('thead',
+              React.createElement('tr', null,
+                React.createElement('th', { className: 'text-left p-2' }, 'Customer'),
+                React.createElement('th', { className: 'text-left p-2' }, 'Total Revenue'),
+                React.createElement('th', { className: 'text-left p-2' }, 'Projects'),
+                React.createElement('th', { className: 'text-left p-2' }, 'Last Activity')
+              )
+            ),
+            React.createElement('tbody', null,
+              analytics.topCustomers.map(customer =>
+                React.createElement('tr', { key: customer.customerId },
+                  React.createElement('td', { className: 'p-2' }, customer.name),
+                  React.createElement('td', { className: 'p-2' }, 
+                    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
+                      .format(customer.metrics.totalRevenue)
+                  ),
+                  React.createElement('td', { className: 'p-2' }, customer.metrics.totalProjects),
+                  React.createElement('td', { className: 'p-2' }, 
+                    new Date(customer.metrics.lastActivityDate).toLocaleDateString()
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    );
+  };
+
+  // Render filters and actions
+  const renderControls = () => {
+    return React.createElement('div', { className: 'flex justify-between items-center mb-4' },
+      React.createElement('div', { className: 'flex space-x-4' },
+        // Search Input
+        React.createElement('input', {
+          type: 'text',
+          placeholder: 'Search customers...',
+          value: searchTerm,
+          onChange: e => setSearchTerm(e.target.value),
+          className: 'p-2 border rounded'
+        }),
+        // Status Filter
+        React.createElement('select', {
+          value: statusFilter,
+          onChange: e => setStatusFilter(e.target.value),
+          className: 'p-2 border rounded'
+        },
+          React.createElement('option', { value: 'All' }, 'All Statuses'),
+          React.createElement('option', { value: 'Active' }, 'Active'),
+          React.createElement('option', { value: 'Inactive' }, 'Inactive')
+        )
+      ),
+      // Action Buttons
+      React.createElement('div', { className: 'flex space-x-2' },
+        React.createElement('button', {
+          onClick: exportCustomerData,
+          className: 'p-2 bg-green-600 text-white rounded hover:bg-green-700'
+        }, 'Export CSV'),
+        React.createElement('button', {
+          onClick: () => setViewMode('dashboard'),
+          className: 'p-2 bg-blue-600 text-white rounded hover:bg-blue-700'
+        }, 'View Dashboard')
+      )
+    );
+  };
+
+  // Render Customer List
+  const renderCustomerList = () => {
+    return React.createElement('div', { className: 'mt-4' },
+      React.createElement('table', { className: 'w-full border-collapse' },
+        React.createElement('thead', null,
+          React.createElement('tr', { className: 'bg-gray-100' },
+            React.createElement('th', { className: 'p-2 text-left border' }, 'Customer ID'),
+            React.createElement('th', { className: 'p-2 text-left border' }, 'Name'),
+            React.createElement('th', { className: 'p-2 text-left border' }, 'Email'),
+            React.createElement('th', { className: 'p-2 text-left border' }, 'Phone'),
+            React.createElement('th', { className: 'p-2 text-left border' }, 'Projects'),
+            React.createElement('th', { className: 'p-2 text-left border' }, 'Total Value'),
+            React.createElement('th', { className: 'p-2 text-left border' }, 'Status'),
+            React.createElement('th', { className: 'p-2 text-left border' }, 'Actions')
+          )
+        ),
+        React.createElement('tbody', null,
+          filteredCustomers.map(customer => 
+            React.createElement('tr', { 
+              key: customer.customerId,
+              className: 'hover:bg-gray-50 border-b'
+            },
+              React.createElement('td', { className: 'p-2 border' }, customer.customerId),
+              React.createElement('td', { className: 'p-2 border' }, customer.name),
+              React.createElement('td', { className: 'p-2 border' }, customer.email || 'N/A'),
+              React.createElement('td', { className: 'p-2 border' }, customer.phone || 'N/A'),
+              React.createElement('td', { className: 'p-2 border' }, 
+                customer.metrics?.totalProjects || 0
+              ),
+              React.createElement('td', { className: 'p-2 border' }, 
+                new Intl.NumberFormat('en-US', {
+                  style: 'currency',
+                  currency: 'USD'
+                }).format(customer.metrics?.totalRevenue || 0)
+              ),
+              React.createElement('td', { className: 'p-2 border' },
+                React.createElement('span', {
+                  className: `px-2 py-1 rounded text-xs ${
+                    customer.status === 'Active' ? 'bg-green-100 text-green-800' :
+                    customer.status === 'Inactive' ? 'bg-red-100 text-red-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`
+                }, customer.status || 'Unknown')
+              ),
+              React.createElement('td', { className: 'p-2 border' },
+                React.createElement('div', { className: 'flex space-x-2' },
+                  React.createElement('button', {
+                    onClick: () => {
+                      setSelectedCustomer(customer);
+                      setViewMode('details');
+                    },
+                    className: 'text-blue-600 hover:text-blue-800'
+                  }, 'View'),
+                  React.createElement('button', {
+                    onClick: () => handleSendEstimate(customer.customerId),
+                    className: 'text-green-600 hover:text-green-800'
+                  }, 'Send Estimate')
+                )
+              )
+            )
+          )
+        )
+      )
+    );
+  };
+
+  // Main render
+  return React.createElement('div', { className: 'max-w-6xl mx-auto p-4' },
+    React.createElement('div', { className: 'bg-white shadow rounded-lg p-6' },
+      // Header
+      React.createElement('div', { className: 'mb-6' },
+        React.createElement('h2', { className: 'text-2xl font-bold' }, 'Customer Management'),
+        message.text && React.createElement('div', {
+          className: `mt-2 p-2 rounded ${
+            message.type === 'success' ? 'bg-green-100 text-green-700' :
+            message.type === 'info' ? 'bg-blue-100 text-blue-700' :
+            'bg-red-100 text-red-700'
+          }`
+        }, message.text)
+      ),
+
+      // Controls
+      renderControls(),
+
+      // Main Content
+      loading
+        ? React.createElement('div', { className: 'text-center py-4' }, 'Loading...')
+        : viewMode === 'dashboard'
+          ? renderDashboard()
+          : viewMode === 'details'
+            ? renderCustomerDetails()
+            : renderCustomerList()
+    )
+  );
+};
+</script>

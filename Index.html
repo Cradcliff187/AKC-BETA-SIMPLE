@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <title>AKC LLC Management</title>
+  <!-- Load Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Load React (v17) -->
+  <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+
+  <!-- Include our components -->
+  <?!= include('TimeLogger'); ?>
+  <?!= include('MaterialsReceipt'); ?>
+  <?!= include('SubInvoice'); ?>
+  <?!= include('EstimateCreator'); ?>
+  <?!= include('CustomerManagement'); ?>
+</head>
+<body>
+  <div class="min-h-screen bg-gray-100">
+    <div class="container mx-auto p-4">
+      <!-- Header -->
+      <div class="text-center mb-8">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">AKC LLC Management</h1>
+        <p class="text-gray-600">Select an option to get started</p>
+      </div>
+
+      <!-- Main Content Area -->
+      <div id="mainContent">
+        <div id="menuScreen" class="max-w-2xl mx-auto">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button 
+              id="timeLoggerBtn" 
+              class="p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-center"
+            >
+              <div class="text-2xl text-blue-500 mb-2">⏱️</div>
+              <h2 class="text-xl font-semibold text-gray-800 mb-2">Log Time</h2>
+              <p class="text-gray-600 text-sm">Record time spent on projects</p>
+            </button>
+
+            <button 
+              id="materialsReceiptBtn" 
+              class="p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-center"
+            >
+              <div class="text-2xl text-green-500 mb-2">📝</div>
+              <h2 class="text-xl font-semibold text-gray-800 mb-2">Materials Receipt</h2>
+              <p class="text-gray-600 text-sm">Submit materials and receipts</p>
+            </button>
+
+            <button 
+              id="subInvoiceBtn" 
+              class="p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-center"
+            >
+              <div class="text-2xl text-purple-500 mb-2">🔧</div>
+              <h2 class="text-xl font-semibold text-gray-800 mb-2">Sub-Invoice</h2>
+              <p class="text-gray-600 text-sm">Submit subcontractor invoices</p>
+            </button>
+
+            <button 
+              id="estimateCreatorBtn" 
+              class="p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-center"
+            >
+              <div class="text-2xl text-orange-500 mb-2">📄</div>
+              <h2 class="text-xl font-semibold text-gray-800 mb-2">Create Estimate</h2>
+              <p class="text-gray-600 text-sm">Generate new project estimates</p>
+            </button>
+
+            <button 
+              id="customerManagementBtn" 
+              class="p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-center"
+            >
+              <div class="text-2xl text-teal-500 mb-2">👥</div>
+              <h2 class="text-xl font-semibold text-gray-800 mb-2">Customers</h2>
+              <p class="text-gray-600 text-sm">Manage customer information</p>
+            </button>           
+          </div>
+        </div>
+
+        <div id="root" class="hidden"></div>
+      </div>
+
+      <!-- Back Button (Initially Hidden) -->
+      <div id="backBtn" class="mt-4 text-center hidden">
+        <button class="text-blue-600 hover:text-blue-800">
+          ← Back to Menu
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Main App to handle navigation
+    const App = () => {
+      const [currentPage, setCurrentPage] = React.useState(null);
+
+      React.useEffect(() => {
+        const timeLoggerBtn = document.getElementById('timeLoggerBtn');
+        const materialsReceiptBtn = document.getElementById('materialsReceiptBtn');
+        const subInvoiceBtn = document.getElementById('subInvoiceBtn');
+        const estimateCreatorBtn = document.getElementById('estimateCreatorBtn');
+        const backBtn = document.getElementById('backBtn');
+        const menuScreen = document.getElementById('menuScreen');
+        const rootElement = document.getElementById('root');
+
+        const showComponent = (component) => {
+          menuScreen.classList.add('hidden');
+          rootElement.classList.remove('hidden');
+          backBtn.classList.remove('hidden');
+          setCurrentPage(component);
+        };
+
+        const handleBack = () => {
+          menuScreen.classList.remove('hidden');
+          rootElement.classList.add('hidden');
+          backBtn.classList.add('hidden');
+          setCurrentPage(null);
+        };
+
+        const handleTimeLogger = () => showComponent('timeLogger');
+        const handleMaterialsReceipt = () => showComponent('materialsReceipt');
+        const handleSubInvoice = () => showComponent('subInvoice');
+        const handleEstimateCreator = () => showComponent('estimateCreator');
+        const handleCustomerManagement = () => showComponent('customerManagement');
+
+        timeLoggerBtn.addEventListener('click', handleTimeLogger);
+        materialsReceiptBtn.addEventListener('click', handleMaterialsReceipt);
+        subInvoiceBtn.addEventListener('click', handleSubInvoice);
+        estimateCreatorBtn.addEventListener('click', handleEstimateCreator);
+        backBtn.addEventListener('click', handleBack);
+        customerManagementBtn.addEventListener('click', handleCustomerManagement);
+
+        return () => {
+          timeLoggerBtn.removeEventListener('click', handleTimeLogger);
+          materialsReceiptBtn.removeEventListener('click', handleMaterialsReceipt);
+          subInvoiceBtn.removeEventListener('click', handleSubInvoice);
+          estimateCreatorBtn.removeEventListener('click', handleEstimateCreator);
+          backBtn.removeEventListener('click', handleBack);
+        };
+      }, []);
+
+      if (!currentPage) return null;
+
+      if (currentPage === 'timeLogger') {
+        return React.createElement(TimeLogger);
+      } else if (currentPage === 'materialsReceipt') {
+        return React.createElement(MaterialsReceipt);
+      } else if (currentPage === 'subInvoice') {
+        return React.createElement(SubInvoice);
+      } else if (currentPage === 'estimateCreator') {
+        return React.createElement(EstimateCreator);
+      } else if (currentPage === 'customerManagement') {
+        return React.createElement(CustomerManagement);
+      }
+    };
+
+    // Initialize the app on DOMContentLoaded
+    document.addEventListener('DOMContentLoaded', () => {
+      const root = document.getElementById('root');
+      ReactDOM.render(React.createElement(App), root);
+    });
+  </script>
+</body>
+</html>

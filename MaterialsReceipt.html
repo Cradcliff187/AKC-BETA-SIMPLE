@@ -1,0 +1,544 @@
+<script>
+const MaterialsReceipt = () => {
+  // ============ STATE MANAGEMENT ============
+  // Project state
+  const [projects, setProjects] = React.useState([]);
+  const [selectedProject, setSelectedProject] = React.useState('');
+  const [selectedProjectFolderId, setSelectedProjectFolderId] = React.useState('');
+  
+  // Vendor state
+  const [vendors, setVendors] = React.useState([]);
+  const [selectedVendorId, setSelectedVendorId] = React.useState('');
+  const [selectedVendorName, setSelectedVendorName] = React.useState('');
+  const [creatingNewVendor, setCreatingNewVendor] = React.useState(false);
+  const [newVendorName, setNewVendorName] = React.useState('');
+  
+  // Receipt details
+  const [amount, setAmount] = React.useState('');
+  const [displayAmount, setDisplayAmount] = React.useState('');
+  const [forUserEmail, setForUserEmail] = React.useState('');
+  const [receiptFile, setReceiptFile] = React.useState(null);
+  
+  // UI state
+  const [message, setMessage] = React.useState({ text: '', type: '' });
+  const [loading, setLoading] = React.useState(false);
+  const fileInputRef = React.useRef(null);
+  const mountedRef = React.useRef(true);
+
+  // ============ LIFECYCLE ============
+  React.useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  // Fetch projects and vendors on mount
+  React.useEffect(() => {
+    const fetchData = async () => {
+      if (!mountedRef.current) return;
+      
+      // Fetch projects
+      try {
+        const projectsResponse = await new Promise(resolve => {
+          google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(err => resolve({ success: false, error: err.message }))
+            .getProjects();
+        });
+        
+        if (mountedRef.current) {
+          if (projectsResponse.success) {
+            setProjects(projectsResponse.data);
+          } else {
+            showMessage(projectsResponse.error || 'Failed to load projects', 'error');
+          }
+        }
+      } catch (error) {
+        if (mountedRef.current) {
+          showMessage('Failed to load projects', 'error');
+        }
+      }
+
+      // Fetch vendors
+      try {
+        const vendorsResponse = await new Promise(resolve => {
+          google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(err => resolve({ success: false, error: err.message }))
+            .getVendorsForClient();
+        });
+        
+        if (mountedRef.current) {
+          if (vendorsResponse.success) {
+            setVendors(vendorsResponse.data);
+          } else {
+            showMessage(vendorsResponse.error || 'Failed to load vendors', 'error');
+          }
+        }
+      } catch (error) {
+        if (mountedRef.current) {
+          showMessage('Failed to load vendors', 'error');
+        }
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // ============ HELPER FUNCTIONS ============
+  const showMessage = (text, type) => {
+    if (!mountedRef.current) return;
+    setMessage({ text, type });
+  };
+
+  const resetForm = () => {
+    if (!mountedRef.current) return;
+    // Project reset
+    setSelectedProject('');
+    setSelectedProjectFolderId('');
+    
+    // Vendor reset
+    setSelectedVendorId('');
+    setSelectedVendorName('');
+    setCreatingNewVendor(false);
+    setNewVendorName('');
+    
+    // Receipt details reset
+    setAmount('');
+    setDisplayAmount('');
+    setForUserEmail('');
+    setReceiptFile(null);
+    
+    // UI reset
+    setMessage({ text: '', type: '' });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const formatAsCurrency = (value) => {
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) return '';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+    }).format(numValue);
+  };
+
+  // ============ EVENT HANDLERS ============
+  const handleCurrencyInput = (value, setValue) => {
+    let numbersOnly = value.replace(/[^0-9.]/g, '');
+    const parts = numbersOnly.split('.');
+    
+    if (parts.length > 2) {
+      numbersOnly = parts[0] + '.' + parts[1];
+    }
+    if (parts.length > 1) {
+      numbersOnly = parts[0] + '.' + parts[1].slice(0, 2);
+    }
+    
+    const numValue = parseFloat(numbersOnly);
+    if (!isNaN(numValue)) {
+      setValue(numbersOnly);
+      setDisplayAmount(formatAsCurrency(numValue));
+    }
+  };
+
+  const handleFileChange = e => {
+    const file = e.target.files[0];
+    if (file) {
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf'];
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      
+      console.log('Selected file:', file);
+      console.log('File type:', file.type);
+      console.log('File size:', file.size);
+      
+      if (!allowedTypes.includes(file.type)) {
+        showMessage('Please upload an image file (JPEG, PNG, GIF) or PDF', 'error');
+        fileInputRef.current.value = '';
+        return;
+      }
+      
+      if (file.size > maxSize) {
+        showMessage('File is too large. Maximum size is 10MB.', 'error');
+        fileInputRef.current.value = '';
+        return;
+      }
+      
+      setReceiptFile(file);
+      console.log('File accepted for upload');
+    }
+  };
+
+  const handleProjectChange = e => {
+    const selectedProjId = e.target.value;
+    setSelectedProject(selectedProjId);
+
+    const selectedProj = projects.find(proj => proj.id === selectedProjId);
+    if (selectedProj && selectedProj.materialsFolderId) {
+      setSelectedProjectFolderId(selectedProj.materialsFolderId);
+    } else {
+      setSelectedProjectFolderId('');
+      showMessage('No Materials folder ID associated with this project', 'error');
+    }
+  };
+
+  const handleVendorChange = (e) => {
+    const val = e.target.value;
+    if (val === 'CREATE_NEW') {
+      setCreatingNewVendor(true);
+      setSelectedVendorId('');
+      setSelectedVendorName('');
+    } else {
+      setCreatingNewVendor(false);
+      setSelectedVendorId(val);
+      const found = vendors.find(v => v.vendorId === val);
+      setSelectedVendorName(found ? found.vendorName : '');
+    }
+  };
+
+  const uploadReceiptFile = async (file) => {
+    console.log('=== Starting File Upload ===');
+    console.log('File:', file);
+    console.log('Selected Project:', selectedProject);
+    console.log('Projects:', projects);
+    console.log('Selected Project Folder ID:', selectedProjectFolderId);
+
+    // Log full details of the selected project
+    const selectedProj = projects.find(proj => proj.id === selectedProject);
+    console.log('Selected Project Details:', selectedProj);
+
+    return new Promise((resolve, reject) => {
+      if (!selectedProjectFolderId) {
+        console.error('ERROR: No project folder selected');
+        console.error('Current Projects:', projects);
+        console.error('Selected Project:', selectedProject);
+        console.error('Selected Project Details:', selectedProj);
+        
+        reject(new Error('No Materials folder ID associated with this project'));
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        console.log('FileReader onloadend triggered');
+        console.log('Base64 data length:', reader.result.length);
+        console.log('Folder ID being sent:', selectedProjectFolderId);
+
+        try {
+          const fileInfo = await new Promise((uploadResolve, uploadReject) => {
+            console.log('Calling uploadReceiptFile in Apps Script');
+            google.script.run
+              .withSuccessHandler((result) => {
+                console.log('Upload success:', result);
+                if (result.success) {
+                  uploadResolve(result);
+                } else {
+                  console.error('Upload failed:', result.error);
+                  uploadReject(new Error(result.error || 'Upload failed'));
+                }
+              })
+              .withFailureHandler((error) => {
+                console.error('Upload failed:', error);
+                uploadReject(error);
+              })
+              .uploadReceiptFile(reader.result, selectedProjectFolderId, 'MATREC');
+          });
+          resolve(fileInfo);
+        } catch (error) {
+          console.error('Error in file upload:', error);
+          reject(error);
+        }
+      };
+      reader.onerror = (error) => {
+        console.error('FileReader error:', error);
+        reject(error);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleSubmit = async (e) => {
+      e.preventDefault();
+      if (!mountedRef.current) return;
+
+      console.log('=== handleSubmit triggered ===');
+      console.log('Selected Project:', selectedProject);
+      console.log('Selected Vendor ID:', selectedVendorId, 'Vendor Name:', selectedVendorName);
+      console.log('Amount (raw):', amount, 'ForUserEmail:', forUserEmail);
+      console.log('Receipt File:', receiptFile);
+
+      // Validation
+      if (!selectedProject) {
+        showMessage('Please select a project', 'error');
+        return;
+      }
+
+      if (creatingNewVendor && !newVendorName.trim()) {
+        showMessage('Please enter a vendor name', 'error');
+        return;
+      }
+
+      if (!creatingNewVendor && !selectedVendorId) {
+        showMessage('Please select a vendor', 'error');
+        return;
+      }
+
+      if (!amount || parseFloat(amount) <= 0) {
+        showMessage('Please enter a valid amount', 'error');
+        return;
+      }
+
+      setLoading(true);
+      showMessage("Submitting receipt, please wait...", "info");
+
+      try {
+        // Handle new vendor creation if needed
+        let finalVendorId = selectedVendorId;
+        let finalVendorName = selectedVendorName;
+
+        if (creatingNewVendor) {
+          console.log('Creating new vendor:', newVendorName.trim());
+          try {
+            const vendorResponse = await new Promise((resolve, reject) => {
+              google.script.run
+                .withSuccessHandler(response => {
+                  console.log('Raw vendor creation response:', response);
+                  // Even if response is null, we'll resolve with a default structure
+                  resolve(response || { 
+                    success: true, 
+                    data: { 
+                      vendorId: `VEND-${Date.now()}`,  // Fallback ID if needed
+                      vendorName: newVendorName.trim() 
+                    } 
+                  });
+                })
+                .withFailureHandler(error => {
+                  console.error('Server error creating vendor:', error);
+                  reject(new Error(error.message || 'Server error creating vendor'));
+                })
+                .createVendorForClient({
+                  vendorName: newVendorName.trim()
+                });
+            });
+
+            console.log('Processed vendor response:', vendorResponse);
+            
+            // Refresh vendors list to include the new vendor
+            const updatedVendors = await new Promise(resolve => {
+              google.script.run
+                .withSuccessHandler(resolve)
+                .withFailureHandler(err => resolve({ success: false, error: err.message }))
+                .getVendorsForClient();
+            });
+
+            if (updatedVendors.success) {
+              setVendors(updatedVendors.data);
+              // Find the newly created vendor in the updated list
+              const newVendor = updatedVendors.data.find(v => v.vendorName === newVendorName.trim());
+              if (newVendor) {
+                finalVendorId = newVendor.vendorId;
+                finalVendorName = newVendor.vendorName;
+              } else {
+                // Use the response data if available, otherwise use defaults
+                finalVendorId = vendorResponse.data?.vendorId;
+                finalVendorName = vendorResponse.data?.vendorName || newVendorName.trim();
+              }
+            }
+
+            console.log('Final vendor details:', { finalVendorId, finalVendorName });
+          } catch (vendorError) {
+            console.error('Vendor creation error:', vendorError);
+            throw new Error(`Failed to create vendor: ${vendorError.message}`);
+          }
+        }
+
+        // Handle file upload if present
+        let fileInfo = null;
+        if (receiptFile) {
+          console.log('Uploading file...');
+          fileInfo = await uploadReceiptFile(receiptFile);
+          console.log('File upload returned:', fileInfo);
+        }
+
+        if (!mountedRef.current) return;
+
+        const payload = {
+          projectId: selectedProject,
+          vendorId: finalVendorId,
+          vendorName: finalVendorName,
+          amount: parseFloat(amount),
+          receiptDocURL: fileInfo?.data?.url || '',
+          forUserEmail
+        };
+
+        console.log('== Final payload for submitMaterialsReceipt ==');
+        console.log(payload);
+
+        // Submit receipt
+        const response = await new Promise((resolve, reject) => {
+          google.script.run
+            .withSuccessHandler(result => {
+              console.log('submitMaterialsReceipt response:', result);
+              if (result && (result.success || result.id)) {
+                resolve({ success: true, ...result });
+              } else {
+                reject(new Error(`Unexpected error from server: ${JSON.stringify(result)}`));
+              }
+            })
+            .withFailureHandler(err => {
+              console.error('GAS failureHandler:', err);
+              reject(new Error("Google Apps Script error: " + err.message));
+            })
+            .submitMaterialsReceipt(payload);
+        });
+
+        if (!mountedRef.current) return;
+        showMessage(`✅ Materials receipt submitted successfully! Receipt ID: ${response.id}`, 'success');
+        setTimeout(() => {
+          if (mountedRef.current) resetForm();
+        }, 2000);
+
+      } catch (error) {
+        console.error("❌ Submission Error:", error.message);
+        if (mountedRef.current) {
+          showMessage(error.message || 'Unexpected error occurred. Try again.', 'error');
+        }
+      } finally {
+        if (mountedRef.current) {
+          setLoading(false);
+        }
+      }
+    };
+
+  // ============ RENDER ============
+  return React.createElement('div', { className: 'max-w-2xl mx-auto p-4' },
+    React.createElement('div', { className: 'bg-white shadow rounded-lg p-6' },
+      React.createElement('h2', { className: 'text-2xl font-bold mb-4' }, 'Submit Materials Receipt'),
+
+      message.text && React.createElement('div', {
+        className: `mb-4 p-4 rounded ${
+          message.type === 'success' ? 'bg-green-100 text-green-700' :
+          message.type === 'info' ? 'bg-blue-100 text-blue-700' :
+          'bg-red-100 text-red-700'
+        }`
+      }, message.text),
+
+      React.createElement('form', { onSubmit: handleSubmit, className: 'space-y-4' },
+        // Project Selection
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Project:'),
+          React.createElement('select', {
+            value: selectedProject,
+            onChange: handleProjectChange,
+            className: 'w-full p-2 border rounded',
+            required: true
+          },
+            React.createElement('option', { value: '' }, 'Select Project'),
+            projects.map(project =>
+              React.createElement('option', {
+                key: project.id,
+                value: project.id
+              }, 
+                `${project.projectId} - ${project.name}${project.jobId ? ` (Job: ${project.jobId})` : ''} - ${project.status}`
+              )
+            )
+          )
+        ),
+
+        // Vendor Selection
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Vendor:'),
+          React.createElement('select', {
+            value: creatingNewVendor ? 'CREATE_NEW' : selectedVendorId,
+            onChange: handleVendorChange,
+            className: 'w-full p-2 border rounded',
+            required: true
+          },
+            React.createElement('option', { value: '' }, 'Select Vendor'),
+            vendors.map(vendor =>
+              React.createElement('option', {
+                key: vendor.vendorId,
+                value: vendor.vendorId
+              }, 
+                `${vendor.vendorName} (${vendor.vendorId})`
+              )
+            ),
+            React.createElement('option', { value: 'CREATE_NEW' }, 'Create New Vendor')
+          )
+        ),
+
+        // New Vendor Form
+        creatingNewVendor && React.createElement('div', { className: 'bg-gray-50 p-4 rounded space-y-2' },
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Vendor Name *'),
+            React.createElement('input', {
+              type: 'text',
+              value: newVendorName,
+              onChange: e => setNewVendorName(e.target.value),
+              className: 'w-full p-2 border rounded',
+              required: true
+            })
+          )
+        ),
+
+        // Amount
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Receipt Amount:'),
+          React.createElement('div', { className: 'relative' },
+            React.createElement('span', {
+              className: 'absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500'
+            }, '$'),
+            React.createElement('input', {
+              type: 'text',
+              value: amount,
+              onChange: e => handleCurrencyInput(e.target.value, setAmount),
+              className: 'w-full p-2 pl-7 border rounded',
+              placeholder: '0.00',
+              required: true
+            })
+          ),
+          displayAmount && React.createElement('div', {
+            className: 'text-sm text-gray-500 mt-1'
+          }, `Entered amount: ${displayAmount}`)
+        ),
+
+        // ForUserEmail (continued)
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'For Which Employee Email (optional):'),
+          React.createElement('input', {
+            type: 'email',
+            placeholder: 'If blank, submitted for yourself',
+            value: forUserEmail,
+            onChange: e => setForUserEmail(e.target.value),
+            className: 'w-full p-2 border rounded'
+          })
+        ),
+
+        // File Upload
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Upload Receipt (PDF or Image):'),
+          React.createElement('input', {
+            type: 'file',
+            ref: fileInputRef,
+            onChange: handleFileChange,
+            accept: 'image/*,application/pdf',
+            capture: 'environment',
+            className: 'w-full p-2 border rounded'
+          })
+        ),
+
+        // Submit Button
+        React.createElement('button', {
+          type: 'submit',
+          className: `w-full p-3 rounded text-white font-medium ${
+            loading ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
+          }`,
+          disabled: loading || !selectedProject || (!selectedVendorId && !creatingNewVendor) || 
+                  (creatingNewVendor && !newVendorName.trim()) || !amount,
+        }, loading ? 'Submitting...' : 'Submit')
+      )
+    )
+  );
+};
+</script>
