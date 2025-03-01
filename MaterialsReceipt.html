@@ -1,5 +1,11 @@
 <script>
 const MaterialsReceipt = () => {
+  // Access global styles
+  const styles = window.appStyles || {};
+
+  // Use with null checks
+  const containerClass = styles.layout?.container || 'max-w-2xl mx-auto p-4';
+
   // ============ STATE MANAGEMENT ============
   // Project state
   const [projects, setProjects] = React.useState([]);
@@ -412,26 +418,25 @@ const MaterialsReceipt = () => {
     };
 
   // ============ RENDER ============
-  return React.createElement('div', { className: 'max-w-2xl mx-auto p-4' },
-    React.createElement('div', { className: 'bg-white shadow rounded-lg p-6' },
+  return React.createElement('div', { className: styles.container },
+    React.createElement('div', { className: styles.card },
       React.createElement('h2', { className: 'text-2xl font-bold mb-4' }, 'Submit Materials Receipt'),
 
       message.text && React.createElement('div', {
-        className: `mb-4 p-4 rounded ${
-          message.type === 'success' ? 'bg-green-100 text-green-700' :
-          message.type === 'info' ? 'bg-blue-100 text-blue-700' :
-          'bg-red-100 text-red-700'
-        }`
+        className: styles.message[message.type]
       }, message.text),
 
-      React.createElement('form', { onSubmit: handleSubmit, className: 'space-y-4' },
+      React.createElement('form', { 
+        onSubmit: handleSubmit, 
+        className: styles.form.group 
+      },
         // Project Selection
         React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Project:'),
+          React.createElement('label', { className: styles.form.label }, 'Project:'),
           React.createElement('select', {
             value: selectedProject,
             onChange: handleProjectChange,
-            className: 'w-full p-2 border rounded',
+            className: styles.form.select,
             required: true
           },
             React.createElement('option', { value: '' }, 'Select Project'),
@@ -448,11 +453,11 @@ const MaterialsReceipt = () => {
 
         // Vendor Selection
         React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Vendor:'),
+          React.createElement('label', { className: styles.form.label }, 'Vendor:'),
           React.createElement('select', {
             value: creatingNewVendor ? 'CREATE_NEW' : selectedVendorId,
             onChange: handleVendorChange,
-            className: 'w-full p-2 border rounded',
+            className: styles.form.select,
             required: true
           },
             React.createElement('option', { value: '' }, 'Select Vendor'),
@@ -460,9 +465,7 @@ const MaterialsReceipt = () => {
               React.createElement('option', {
                 key: vendor.vendorId,
                 value: vendor.vendorId
-              }, 
-                `${vendor.vendorName} (${vendor.vendorId})`
-              )
+              }, `${vendor.vendorName} (${vendor.vendorId})`)
             ),
             React.createElement('option', { value: 'CREATE_NEW' }, 'Create New Vendor')
           )
@@ -471,12 +474,12 @@ const MaterialsReceipt = () => {
         // New Vendor Form
         creatingNewVendor && React.createElement('div', { className: 'bg-gray-50 p-4 rounded space-y-2' },
           React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Vendor Name *'),
+            React.createElement('label', { className: styles.form.label }, 'Vendor Name *'),
             React.createElement('input', {
               type: 'text',
               value: newVendorName,
               onChange: e => setNewVendorName(e.target.value),
-              className: 'w-full p-2 border rounded',
+              className: styles.form.input,
               required: true
             })
           )
@@ -484,7 +487,7 @@ const MaterialsReceipt = () => {
 
         // Amount
         React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Receipt Amount:'),
+          React.createElement('label', { className: styles.form.label }, 'Receipt Amount:'),
           React.createElement('div', { className: 'relative' },
             React.createElement('span', {
               className: 'absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500'
@@ -503,42 +506,49 @@ const MaterialsReceipt = () => {
           }, `Entered amount: ${displayAmount}`)
         ),
 
-        // ForUserEmail (continued)
+        // ForUserEmail
         React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'For Which Employee Email (optional):'),
+          React.createElement('label', { className: styles.form.label }, 'For Which Employee Email (optional):'),
           React.createElement('input', {
             type: 'email',
             placeholder: 'If blank, submitted for yourself',
             value: forUserEmail,
             onChange: e => setForUserEmail(e.target.value),
-            className: 'w-full p-2 border rounded'
+            className: styles.form.input
           })
         ),
 
         // File Upload
         React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Upload Receipt (PDF or Image):'),
+          React.createElement('label', { className: styles.form.label }, 'Upload Receipt (PDF or Image):'),
           React.createElement('input', {
             type: 'file',
             ref: fileInputRef,
             onChange: handleFileChange,
             accept: 'image/*,application/pdf',
             capture: 'environment',
-            className: 'w-full p-2 border rounded'
+            className: styles.form.input
           })
         ),
 
         // Submit Button
-        React.createElement('button', {
-          type: 'submit',
-          className: `w-full p-3 rounded text-white font-medium ${
-            loading ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
-          }`,
-          disabled: loading || !selectedProject || (!selectedVendorId && !creatingNewVendor) || 
-                  (creatingNewVendor && !newVendorName.trim()) || !amount,
-        }, loading ? 'Submitting...' : 'Submit')
+        React.createElement('div', { className: 'flex space-x-4' },
+          React.createElement('button', {
+            type: 'button',
+            onClick: resetForm,
+            className: styles.button.secondary
+          }, 'Cancel'),
+          React.createElement('button', {
+            type: 'submit',
+            disabled: loading,
+            className: styles.button.primary
+          }, loading ? 'Submitting...' : 'Submit')
+        )
       )
     )
   );
 };
+
+// Make component available globally
+window.MaterialsReceipt = MaterialsReceipt;
 </script>

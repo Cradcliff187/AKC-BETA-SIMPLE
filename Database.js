@@ -93,7 +93,8 @@ function createProjectRecord(data) {
       userEmail,            // LastModifiedBy
       estimatesFolderId,    // EstimatesFolderID
       materialsFolderId,    // MaterialsFolderID
-      subInvoicesFolderId   // SubInvoicesFolderID
+      subInvoicesFolderId,  // SubInvoicesFolderID
+      `https://drive.google.com/drive/folders/${folderId}`  // DocUrl - NEW
     ];
 
     sheet.appendRow(rowData);
@@ -124,7 +125,8 @@ function createProjectRecord(data) {
           estimates: estimatesFolderId,
           materials: materialsFolderId,
           subInvoices: subInvoicesFolderId
-        }
+        },
+        docUrl: `https://drive.google.com/drive/folders/${folderId}`  // Add to return data
       }
     };
   } catch (error) {
@@ -206,13 +208,15 @@ function logMaterialsReceipt(data) {
 function getSubcontractors() {
   const { headers, rows } = getSheetData(CONFIG.SHEETS.SUBCONTRACTORS);
   
-  const subIdCol = headers.indexOf("SubID");
-  const subNameCol = headers.indexOf("SubName");
+  // Looks specifically for these column headers:
+  const subIdCol = headers.indexOf("SubID");         // e.g. "Sub-001"
+  const subNameCol = headers.indexOf("SubName");     // e.g. "John's Plumbing"
   
   if (subIdCol === -1 || subNameCol === -1) {
     throw new Error("Required columns not found in Subcontractors sheet");
   }
 
+  // Returns array of objects with this structure:
   return rows.map(row => ({
     subId: row[subIdCol],
     subName: row[subNameCol]
@@ -254,7 +258,8 @@ function createSubcontractor(data) {
     data.state || '',
     data.zip || '',
     data.contactEmail || '',
-    data.phone || ''
+    data.phone || '',
+    'Sub'  // QbVendorType - Always 'Sub' for subcontractors
   ]);
 
   return {
@@ -265,7 +270,8 @@ function createSubcontractor(data) {
     state: data.state || '',
     zip: data.zip || '',
     contactEmail: data.contactEmail || '',
-    phone: data.phone || ''
+    phone: data.phone || '',
+    qbVendorType: 'Sub'
   };
 }
 
@@ -332,6 +338,9 @@ function createCustomerRecord(data) {
   const userEmail = Session.getActiveUser().getEmail();
   const initialStatus = CUSTOMER_STATUSES.ACTIVE;
 
+  // Format phone number before saving
+  const formattedPhone = formatPhoneNumber(data.phone);
+
   sheet.appendRow([
     customerId,
     data.name || '',
@@ -340,7 +349,7 @@ function createCustomerRecord(data) {
     data.state || '',
     data.zip || '',
     data.email || '',
-    data.phone || '',
+    formattedPhone,    // Use formatted phone number
     now,
     userEmail,
     initialStatus
@@ -387,8 +396,8 @@ function createCustomerRecord(data) {
 function getVendors() {
   const { headers, rows } = getSheetData(CONFIG.SHEETS.VENDORS);
   
-  const vendorIdCol = headers.indexOf("VendorID");
-  const vendorNameCol = headers.indexOf("VendorName");
+  const vendorIdCol = headers.indexOf("VendorID");     // e.g. "VEND-001"
+  const vendorNameCol = headers.indexOf("VendorName");  // e.g. "Home Depot"
   
   if (vendorIdCol === -1 || vendorNameCol === -1) {
     throw new Error("Required columns not found in Vendors sheet");
@@ -408,51 +417,35 @@ function createVendor(data) {
   const now = new Date();
   const userEmail = Session.getActiveUser().getEmail();
 
-  // Append all fields including CreatedOn, CreatedBy, and Status
+  // Add the row to the sheet
   sheet.appendRow([
     vendorId,              // VendorID
     data.vendorName || '', // VendorName
     now,                   // CreatedOn
     userEmail,            // CreatedBy
-    'Active'              // Status
+    'Active',             // Status
+    'Vend'               // QbVendorType - Always 'Vend' for vendors
   ]);
+
+  // Verify the vendor was created
+  const verifyData = sheet.getDataRange().getValues();
+  const vendorRow = verifyData.find(row => row[0] === vendorId);
+  
+  if (!vendorRow) {
+    throw new Error('Vendor creation verification failed');
+  }
 
   return {
     success: true,
     data: {
-      vendorId,
-      vendorName: data.vendorName || '',
+      vendorId: vendorId,            // Ensure vendorId is included
+      vendorName: data.vendorName,
       createdOn: now,
       createdBy: userEmail,
-      status: 'Active'
+      status: 'Active',
+      qbVendorType: 'Vend'
     }
   };
-}
-
-function generateVendorID() {
-  const sheet = getSheet(CONFIG.SHEETS.VENDORS);
-  if (sheet.getLastRow() < 2) return "VEND-001";
-
-  // Get all existing vendor IDs
-  const data = sheet.getDataRange().getValues();
-  const existingIds = data.slice(1).map(row => row[0]); // Skip header row
-  
-  // Filter for only VEND-XXX format IDs
-  const vendIds = existingIds.filter(id => /^VEND-\d{3}$/.test(id));
-  
-  if (vendIds.length === 0) {
-    // No properly formatted IDs exist yet, start with 001
-    return "VEND-001";
-  }
-  
-  // Find the highest number used
-  const maxNum = Math.max(...vendIds.map(id => {
-    const match = id.match(/^VEND-(\d{3})$/);
-    return match ? parseInt(match[1], 10) : 0;
-  }));
-  
-  // Generate next number
-  return `VEND-${(maxNum + 1).toString().padStart(3, '0')}`;
 }
 
 // ==========================================
@@ -549,12 +542,26 @@ function generateProjectID() {
 function getNextSubId(sheet) {
   if (sheet.getLastRow() < 2) return "Sub-001";
 
-  const lastSubId = sheet.getRange(sheet.getLastRow(), 1).getValue().toString();
-  const match = lastSubId.match(/^Sub-(\d+)$/);
-  if (!match) throw new Error("Invalid SubID format in last row: " + lastSubId);
-
-  const nextNum = parseInt(match[1], 10) + 1;
-  return "Sub-" + nextNum.toString().padStart(3, '0');
+  // Get all existing sub IDs
+  const data = sheet.getDataRange().getValues();
+  const existingIds = data.slice(1).map(row => row[0]); // Skip header row
+  
+  // Filter for only Sub-XXX format IDs
+  const subIds = existingIds.filter(id => /^Sub-\d{3}$/.test(id));
+  
+  if (subIds.length === 0) {
+    // No properly formatted IDs exist yet, start with 001
+    return "Sub-001";
+  }
+  
+  // Find the highest number used
+  const maxNum = Math.max(...subIds.map(id => {
+    const match = id.match(/^Sub-(\d{3})$/);
+    return match ? parseInt(match[1], 10) : 0;
+  }));
+  
+  // Generate next number
+  return `Sub-${(maxNum + 1).toString().padStart(3, '0')}`;
 }
 
 function generateEstimateID(projectID) {
@@ -577,6 +584,32 @@ function generateEstimateID(projectID) {
   }));
 
   return `EST-${projectID}-${lastSequence + 1}`;
+}
+
+function generateVendorID() {
+  const sheet = getSheet(CONFIG.SHEETS.VENDORS);
+  if (sheet.getLastRow() < 2) return "VEND-001";
+
+  // Get all existing vendor IDs
+  const data = sheet.getDataRange().getValues();
+  const existingIds = data.slice(1).map(row => row[0]); // Skip header row
+  
+  // Filter for only VEND-XXX format IDs
+  const vendIds = existingIds.filter(id => /^VEND-\d{3}$/.test(id));
+  
+  if (vendIds.length === 0) {
+    // No properly formatted IDs exist yet, start with 001
+    return "VEND-001";
+  }
+  
+  // Find the highest number used
+  const maxNum = Math.max(...vendIds.map(id => {
+    const match = id.match(/^VEND-(\d{3})$/);
+    return match ? parseInt(match[1], 10) : 0;
+  }));
+  
+  // Generate next number
+  return `VEND-${(maxNum + 1).toString().padStart(3, '0')}`;
 }
 
 // ==========================================
@@ -721,7 +754,7 @@ function logEstimate(data) {
     data.projectId || '',           // B: ProjectID
     now,                            // C: DateCreated
     data.customerId || '',          // D: CustomerID
-    data.estimateAmount || 0,       // E: EstimateAmount
+    parseFloat(data.amount) || 0,   // E: EstimateAmount (main amount)
     parseFloat(data.contingencyAmount) || 0,  // F: ContingencyAmount
     userEmail,                      // G: CreatedBy
     '',                             // H: DocUrl placeholder
@@ -733,7 +766,9 @@ function logEstimate(data) {
     data.siteLocationAddress || '', // N: SiteLocationAddress
     data.siteLocationCity || '',    // O: SiteLocationCity
     data.siteLocationState || '',   // P: SiteLocationState
-    data.siteLocationZip || ''      // Q: SiteLocationZip
+    data.siteLocationZip || '',     // Q: SiteLocationZip
+    data.poNumber || '',            // R: PONumber
+    data.jobDescription || ''       // S: JobDescription
   ];
 
   Logger.log('Appending row data to ESTIMATES sheet:', rowData);
@@ -915,4 +950,6 @@ function enrichCustomerData(customer) {
     }
   };
 }
+
+
 

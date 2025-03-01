@@ -10,12 +10,38 @@
   <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
 
-  <!-- Include our components -->
+  <!-- Server-side scripts are automatically included by Apps Script -->
+  <!-- Database.gs, Utils.gs, and Config.gs do NOT need to be included here -->
+
+  <!-- Include only client-side component files -->
   <?!= include('TimeLogger'); ?>
   <?!= include('MaterialsReceipt'); ?>
   <?!= include('SubInvoice'); ?>
   <?!= include('EstimateCreator'); ?>
   <?!= include('CustomerManagement'); ?>
+
+  <script>
+    // Global styles object available to all components
+    window.appStyles = {
+      container: 'max-w-2xl mx-auto p-4',
+      card: 'bg-white shadow rounded-lg p-6',
+      form: {
+        group: 'space-y-4',
+        label: 'block text-sm font-medium mb-1',
+        input: 'w-full p-2 border rounded',
+        select: 'w-full p-2 border rounded'
+      },
+      button: {
+        primary: 'w-full p-3 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400',
+        secondary: 'w-full p-3 border rounded hover:bg-gray-50'
+      },
+      message: {
+        success: 'mb-4 p-4 rounded bg-green-100 text-green-700',
+        error: 'mb-4 p-4 rounded bg-red-100 text-red-700',
+        info: 'mb-4 p-4 rounded bg-blue-100 text-blue-700'
+      }
+    };
+  </script>
 </head>
 <body>
   <div class="min-h-screen bg-gray-100">
@@ -90,71 +116,87 @@
   </div>
 
   <script>
-    // Main App to handle navigation
     const App = () => {
       const [currentPage, setCurrentPage] = React.useState(null);
 
-      React.useEffect(() => {
-        const timeLoggerBtn = document.getElementById('timeLoggerBtn');
-        const materialsReceiptBtn = document.getElementById('materialsReceiptBtn');
-        const subInvoiceBtn = document.getElementById('subInvoiceBtn');
-        const estimateCreatorBtn = document.getElementById('estimateCreatorBtn');
-        const backBtn = document.getElementById('backBtn');
+      // Unified navigation handler
+      const handleNavigation = (page) => {
+        console.log(`Navigating to: ${page}`);
         const menuScreen = document.getElementById('menuScreen');
         const rootElement = document.getElementById('root');
+        const backBtn = document.getElementById('backBtn');
 
-        const showComponent = (component) => {
-          menuScreen.classList.add('hidden');
-          rootElement.classList.remove('hidden');
-          backBtn.classList.remove('hidden');
-          setCurrentPage(component);
-        };
-
-        const handleBack = () => {
+        if (page === null) {
+          // Going back to menu
+          console.log('Returning to menu');
           menuScreen.classList.remove('hidden');
           rootElement.classList.add('hidden');
           backBtn.classList.add('hidden');
-          setCurrentPage(null);
+        } else {
+          // Going to a component
+          console.log('Showing component');
+          menuScreen.classList.add('hidden');
+          rootElement.classList.remove('hidden');
+          backBtn.classList.remove('hidden');
+        }
+        setCurrentPage(page);
+      };
+
+      React.useEffect(() => {
+        const buttons = {
+          timeLoggerBtn: 'timeLogger',
+          materialsReceiptBtn: 'materialsReceipt',
+          subInvoiceBtn: 'subInvoice',
+          estimateCreatorBtn: 'estimateCreator',
+          customerManagementBtn: 'customerManagement'
         };
 
-        const handleTimeLogger = () => showComponent('timeLogger');
-        const handleMaterialsReceipt = () => showComponent('materialsReceipt');
-        const handleSubInvoice = () => showComponent('subInvoice');
-        const handleEstimateCreator = () => showComponent('estimateCreator');
-        const handleCustomerManagement = () => showComponent('customerManagement');
+        // Add click handlers to all buttons
+        Object.entries(buttons).forEach(([btnId, page]) => {
+          const btn = document.getElementById(btnId);
+          if (btn) {
+            const handler = () => handleNavigation(page);
+            btn.addEventListener('click', handler);
+            return () => btn.removeEventListener('click', handler);
+          }
+        });
 
-        timeLoggerBtn.addEventListener('click', handleTimeLogger);
-        materialsReceiptBtn.addEventListener('click', handleMaterialsReceipt);
-        subInvoiceBtn.addEventListener('click', handleSubInvoice);
-        estimateCreatorBtn.addEventListener('click', handleEstimateCreator);
-        backBtn.addEventListener('click', handleBack);
-        customerManagementBtn.addEventListener('click', handleCustomerManagement);
-
-        return () => {
-          timeLoggerBtn.removeEventListener('click', handleTimeLogger);
-          materialsReceiptBtn.removeEventListener('click', handleMaterialsReceipt);
-          subInvoiceBtn.removeEventListener('click', handleSubInvoice);
-          estimateCreatorBtn.removeEventListener('click', handleEstimateCreator);
-          backBtn.removeEventListener('click', handleBack);
-        };
+        // Back button handler
+        const backBtn = document.getElementById('backBtn');
+        if (backBtn) {
+          const handleBack = () => handleNavigation(null);
+          backBtn.addEventListener('click', handleBack);
+          return () => backBtn.removeEventListener('click', handleBack);
+        }
       }, []);
 
-      if (!currentPage) return null;
+      // Component rendering with better error handling
+      console.log('Rendering page:', currentPage);
+      try {
+        if (!currentPage) return null;
 
-      if (currentPage === 'timeLogger') {
-        return React.createElement(TimeLogger);
-      } else if (currentPage === 'materialsReceipt') {
-        return React.createElement(MaterialsReceipt);
-      } else if (currentPage === 'subInvoice') {
-        return React.createElement(SubInvoice);
-      } else if (currentPage === 'estimateCreator') {
-        return React.createElement(EstimateCreator);
-      } else if (currentPage === 'customerManagement') {
-        return React.createElement(CustomerManagement);
+        const components = {
+          timeLogger: TimeLogger,
+          materialsReceipt: MaterialsReceipt,
+          subInvoice: SubInvoice,
+          estimateCreator: EstimateCreator,
+          customerManagement: CustomerManagement
+        };
+
+        const Component = components[currentPage];
+        if (!Component) {
+          console.error(`No component found for page: ${currentPage}`);
+          return null;
+        }
+
+        return React.createElement(Component);
+      } catch (error) {
+        console.error('Error rendering component:', error);
+        return React.createElement('div', null, 'Error loading component');
       }
     };
 
-    // Initialize the app on DOMContentLoaded
+    // Initialize app
     document.addEventListener('DOMContentLoaded', () => {
       const root = document.getElementById('root');
       ReactDOM.render(React.createElement(App), root);

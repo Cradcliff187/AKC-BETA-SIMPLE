@@ -32,6 +32,44 @@ function getProjects() {
   }
 }
 
+function getActiveProjects() {
+  const { headers, rows } = getSheetData(CONFIG.SHEETS.PROJECTS);
+
+  // Column indexes
+  const projectIdCol = headers.indexOf("ProjectID");
+  const projectNameCol = headers.indexOf("ProjectName");
+  const statusCol = headers.indexOf("Status");
+  const folderIdCol = headers.indexOf("FolderID");
+  const jobIdCol = headers.indexOf("JobID");
+  const estimatesFolderCol = headers.indexOf("EstimatesFolderID");
+  const materialsFolderCol = headers.indexOf("MaterialsFolderID");
+  const subInvoicesFolderCol = headers.indexOf("SubInvoicesFolderID");
+  const docUrlCol = headers.indexOf("DocUrl");  // Add this line
+
+  if ([
+    projectIdCol, projectNameCol, statusCol, folderIdCol,
+    estimatesFolderCol, materialsFolderCol, subInvoicesFolderCol,
+    jobIdCol
+  ].includes(-1)) {
+    throw new Error("Required columns not found in Projects sheet");
+  }
+
+  return rows
+    .filter(row => MODULE_ACCESS_STATUSES.includes(row[statusCol]))
+    .map(row => ({
+      id: row[projectIdCol],
+      projectId: row[projectIdCol],
+      name: row[projectNameCol],
+      status: row[statusCol],
+      jobId: row[jobIdCol] || '',
+      folderId: row[folderIdCol],
+      estimatesFolderId: row[estimatesFolderCol],
+      materialsFolderId: row[materialsFolderCol],
+      subInvoicesFolderId: row[subInvoicesFolderCol],
+      docUrl: row[docUrlCol] || `https://drive.google.com/drive/folders/${row[folderIdCol]}`  // Add this line
+    }));
+}
+
 function setWorkspacePermissions(folders) {
   const DOMAIN = 'austinkunzconstruction.com';
   
@@ -701,7 +739,10 @@ function generateEstimateDocument(data) {
       '{{SiteLocationCity}}': data.siteLocationCity || data.customerCity || '',
       '{{SiteLocationState}}': data.siteLocationState || data.customerState || '',
       '{{SiteLocationZip}}': data.siteLocationZip || data.customerZip || '',
-      '{{EstimateAmount}}': formatCurrency(data.estimateAmount || 0)
+      '{{PONumber}}': data.poNumber || '',
+      '{{JobDescription}}': data.jobDescription || '',
+      '{{EstimateAmount}}': formatCurrency(data.estimateAmount || 0),
+      '{{ContingencyAmount}}': formatCurrency(data.contingencyAmount || 0)
     };
     for (let [placeholder, value] of Object.entries(replacements)) {
       body.replaceText(placeholder, value);

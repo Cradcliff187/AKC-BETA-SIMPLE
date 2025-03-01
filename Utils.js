@@ -145,3 +145,23 @@ function validateStatusTransition(oldStatus, newStatus, type) {
 
   return true;
 }
+
+/**
+ * Formats a phone number to (XXX) XXX-XXXX pattern
+ * @param {string} phone - Raw phone number input
+ * @returns {string} Formatted phone number
+ */
+function formatPhoneNumber(phone) {
+  if (!phone) return '';
+  
+  // Remove all non-numeric characters
+  const cleaned = phone.toString().replace(/\D/g, '');
+  
+  // Check if we have a 10-digit number
+  if (cleaned.length === 10) {
+    return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
+  }
+  
+  // Return original if not 10 digits
+  return phone;
+}

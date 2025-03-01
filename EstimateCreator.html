@@ -1,12 +1,4 @@
 <script>
-// Check at load time if google.script.run is available
-console.log("EstimateCreator component script loaded.");
-if (typeof google === "undefined" || !google.script || !google.script.run) {
-  console.error("google.script.run is NOT available. Make sure this page is served by the Apps Script HTML service.");
-} else {
-  console.log("google.script.run is available.");
-}
-
 // Helper function to validate customer data structure
 const validateCustomerResponse = (data) => {
   if (!Array.isArray(data)) {
@@ -14,7 +6,7 @@ const validateCustomerResponse = (data) => {
     return false;
   }
   
-  // Check first customer object structure
+  // Check first customer object structure if any exist
   if (data.length > 0) {
     const requiredFields = ['customerId', 'name', 'address'];
     const firstCustomer = data[0];
@@ -29,6 +21,7 @@ const validateCustomerResponse = (data) => {
   return true;
 };
 
+// Only UI related code, all server calls via google.script.run
 const EstimateCreator = () => {
   // Log component load
   console.log("EstimateCreator component instantiated.");
@@ -55,14 +48,16 @@ const EstimateCreator = () => {
   // Project state
   const [projectData, setProjectData] = React.useState({
     name: '',
+    poNumber: '', // Add PO number
+    jobDescription: '', // Replace scopeOfWork
     siteLocationAddress: '',
     siteLocationCity: '',
     siteLocationState: '',
     siteLocationZip: '',
-    scopeOfWork: '',
-    tableItems: [{ itemService: '', description: '', qtyHours: '', rate: '', amount: '' }],
-    totalAmount: 0,
-    contingencyAmount: 0  // Keep contingency amount as requested
+    amount: '', // Add amount field
+    displayAmount: '', // For formatted display
+    contingencyAmount: '', // Changed from 0 to empty string
+    displayContingencyAmount: '' // For formatted display
   });
 
   // Document preview state
@@ -231,16 +226,15 @@ const EstimateCreator = () => {
   };
 
   const validateProjectData = () => {
-    const required = ['name', 'scopeOfWork'];
+    const required = ['name', 'poNumber', 'jobDescription', 'amount'];
     const missingRequired = required.some(field => !projectData[field]?.trim());
     if (missingRequired) return false;
 
-    // Validate service items
-    if (!projectData.tableItems?.some(item => item.itemService.trim() && item.description.trim())) return false;
-    if (projectData.totalAmount <= 0) return false;
-
-    // Validate contingency amount is a valid number
-    if (isNaN(parseFloat(projectData.contingencyAmount))) return false;
+    // Validate amounts are valid numbers
+    const amount = parseFloat(projectData.amount);
+    const contingency = parseFloat(projectData.contingencyAmount || 0);
+    if (isNaN(amount) || amount <= 0) return false;
+    if (isNaN(contingency)) return false;
 
     return true;
   };
@@ -356,14 +350,7 @@ const EstimateCreator = () => {
       }
       console.log('Created project:', projectResponse.data);
 
-      // Step 3: Format table items for estimate
-      const formattedTableItems = projectData.tableItems.map(item => ({
-        ...item,
-        rate: formatAsCurrency(parseFloat(item.rate)),
-        amount: formatAsCurrency(parseFloat(item.amount))
-      }));
-
-      // Step 4: Create estimate with proper site location handling
+      // Create estimate with proper site location handling
       const estimateData = {
         customerId: customerInfo.customerId,
         projectId: projectResponse.data.projectId,
@@ -382,10 +369,10 @@ const EstimateCreator = () => {
         siteLocationState: usePrimaryAddress ? customerInfo.state : projectData.siteLocationState,
         siteLocationZip: usePrimaryAddress ? customerInfo.zip : projectData.siteLocationZip,
         siteNotes: projectData.siteNotes || '',
-        scopeOfWork: projectData.scopeOfWork,
-        tableItems: formattedTableItems,
-        totalAmount: projectData.totalAmount,
-        contingencyAmount: parseFloat(projectData.contingencyAmount) || 0 // Ensure it's a number
+        jobDescription: projectData.jobDescription,
+        poNumber: projectData.poNumber,
+        estimateAmount: parseFloat(projectData.amount) || 0,
+        contingencyAmount: parseFloat(projectData.contingencyAmount) || 0
       };
 
       console.log('Creating estimate with data:', estimateData);
@@ -441,10 +428,11 @@ const EstimateCreator = () => {
       email: '', phone: ''
     });
     setProjectData({
-      name: '', siteLocationAddress: '', siteLocationCity: '', siteLocationState: '', siteLocationZip: '', scopeOfWork: '',
+      name: '', poNumber: '', jobDescription: '', siteLocationAddress: '', siteLocationCity: '', siteLocationState: '', siteLocationZip: '', scopeOfWork: '',
       tableItems: [{ itemService: '', description: '', qtyHours: '', rate: '', amount: '' }],
       totalAmount: 0,
-      contingencyAmount: 0
+      contingencyAmount: '', // Changed from 0 to empty string
+      displayContingencyAmount: ''
     });
     setPreviewUrl('');
     setDocumentGenerated(false);
@@ -457,6 +445,26 @@ const EstimateCreator = () => {
       setStep('SITE_LOCATION');
     } else {
       showMessage('Please fill in all required fields correctly', 'error');
+    }
+  };
+
+  // Add currency input handler for amount
+  const handleAmountInput = (value) => {
+    let numbersOnly = value.replace(/[^0-9.]/g, '');
+    const parts = numbersOnly.split('.');
+    if (parts.length > 2) {
+      numbersOnly = parts[0] + '.' + parts[1];
+    }
+    if (parts.length > 1) {
+      numbersOnly = parts[0] + '.' + parts[1].slice(0, 2);
+    }
+    const numValue = parseFloat(numbersOnly);
+    if (!isNaN(numValue)) {
+      setProjectData(prev => ({
+        ...prev,
+        amount: numbersOnly,
+        displayAmount: formatAsCurrency(numValue)
+      }));
     }
   };
 
@@ -475,7 +483,8 @@ const EstimateCreator = () => {
     if (!isNaN(numValue)) {
       setProjectData(prev => ({
         ...prev,
-        contingencyAmount: numbersOnly
+        contingencyAmount: numbersOnly,
+        displayContingencyAmount: formatAsCurrency(numValue)
       }));
     }
   };
@@ -761,120 +770,69 @@ const EstimateCreator = () => {
         })
       ),
 
-      // Site Notes
+      // PO Number
       React.createElement('div', null,
-        React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Site Notes'),
-        React.createElement('textarea', {
-          value: projectData.siteNotes,
-          onChange: e => setProjectData(prev => ({ ...prev, siteNotes: e.target.value })),
-          className: 'w-full p-2 border rounded h-20',
-          placeholder: 'Any special instructions or notes about the site'
+        React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'PO#'),
+        React.createElement('input', {
+          type: 'text',
+          value: projectData.poNumber,
+          onChange: e => setProjectData(prev => ({ ...prev, poNumber: e.target.value })),
+          className: 'w-full p-2 border rounded',
+          required: true
         })
       ),
 
-      // Scope of Work
+      // Job Description
       React.createElement('div', null,
-        React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Scope of Work'),
+        React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Job Description'),
         React.createElement('textarea', {
-          value: projectData.scopeOfWork,
-          onChange: e => setProjectData(prev => ({ ...prev, scopeOfWork: e.target.value })),
+          value: projectData.jobDescription,
+          onChange: e => setProjectData(prev => ({ ...prev, jobDescription: e.target.value })),
           className: 'w-full p-2 border rounded h-32',
           required: true,
-          placeholder: 'Describe the overall scope of work'
+          placeholder: 'Describe the job requirements'
         })
       ),
 
-      // Table Items for Services
-      React.createElement('div', { className: 'space-y-2' },
-        React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Service Items'),
-        projectData.tableItems.map((item, index) =>
-          React.createElement('div', { key: index, className: 'border p-2 rounded space-y-2' },
-            // Service
-            React.createElement('div', null,
-              React.createElement('label', { className: 'block text-sm font-medium' }, 'Service'),
-              React.createElement('input', {
-                type: 'text',
-                value: item.itemService,
-                onChange: e => updateTableItem(index, 'itemService', e.target.value),
-                className: 'w-full p-2 border rounded'
-              })
-            ),
-            // Description
-            React.createElement('div', null,
-              React.createElement('label', { className: 'block text-sm font-medium' }, 'Description'),
-              React.createElement('input', {
-                type: 'text',
-                value: item.description,
-                onChange: e => updateTableItem(index, 'description', e.target.value),
-                className: 'w-full p-2 border rounded'
-              })
-            ),
-            // Qty/Hours and Rate
-            React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
-              React.createElement('div', null,
-                React.createElement('label', { className: 'block text-sm font-medium' }, 'Qty/Hours'),
-                React.createElement('input', {
-                  type: 'number',
-                  value: item.qtyHours,
-                  onChange: e => handleQtyInput(index, e.target.value),
-                  className: 'w-full p-2 border rounded'
-                })
-              ),
-              React.createElement('div', null,
-                React.createElement('label', { className: 'block text-sm font-medium' }, 'Rate'),
-                React.createElement('input', {
-                  type: 'text',
-                  value: item.rate,
-                  onChange: e => handleCurrencyInput(index, e.target.value),
-                  className: 'w-full p-2 border rounded',
-                  placeholder: '0.00'
-                })
-              )
-            ),
-            // Amount
-            React.createElement('div', null,
-              React.createElement('span', { className: 'text-sm text-gray-500' }, 
-                `Amount: ${formatAsCurrency(item.amount)}`)
-            ),
-            // Remove button
-            index > 0 && React.createElement('button', {
-              onClick: () => {
-                setProjectData(prev => {
-                  const updatedItems = prev.tableItems.filter((_, i) => i !== index);
-                  return { ...prev, tableItems: updatedItems, totalAmount: calculateTotalAmount(updatedItems) };
-                });
-              },
-              className: 'p-2 text-red-600 hover:bg-red-50 rounded'
-            }, 'Remove')
-          )
+      // Total Amount
+      React.createElement('div', null,
+        React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Total Amount *'),
+        React.createElement('div', { className: 'relative' },
+          React.createElement('span', {
+            className: 'absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500'
+          }, '$'),
+          React.createElement('input', {
+            type: 'text',
+            value: projectData.amount,
+            onChange: e => handleAmountInput(e.target.value),
+            className: 'w-full p-2 pl-7 border rounded',
+            placeholder: '0.00',
+            required: true
+          })
         ),
-        // Add new item button
-        React.createElement('button', {
-          onClick: () => {
-            setProjectData(prev => ({
-              ...prev,
-              tableItems: [...prev.tableItems, { itemService: '', description: '', qtyHours: '', rate: '', amount: '' }]
-            }));
-          },
-          className: 'w-full p-2 border border-dashed rounded hover:bg-gray-50'
-        }, '+ Add Service Item')
+        projectData.displayAmount && React.createElement('div', {
+          className: 'text-sm text-gray-500 mt-1'
+        }, `Entered amount: ${projectData.displayAmount}`)
       ),
 
-      // Totals and Contingency
-      React.createElement('div', { className: 'space-y-4' },
-        React.createElement('div', { className: 'text-lg font-medium' },
-          `Total Amount: ${formatAsCurrency(projectData.totalAmount)}`
-        ),
-        React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Contingency Amount'),
+      // Contingency Amount (unchanged except for display)
+      React.createElement('div', null,
+        React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Contingency Amount'),
+        React.createElement('div', { className: 'relative' },
+          React.createElement('span', {
+            className: 'absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500'
+          }, '$'),
           React.createElement('input', {
             type: 'text',
             value: projectData.contingencyAmount,
             onChange: e => handleContingencyInput(e.target.value),
-            className: 'w-full p-2 border rounded',
+            className: 'w-full p-2 pl-7 border rounded',
             placeholder: '0.00'
           })
-        )
+        ),
+        projectData.displayContingencyAmount && React.createElement('div', {
+          className: 'text-sm text-gray-500 mt-1'
+        }, `Entered amount: ${projectData.displayContingencyAmount}`)
       ),
 
       // Navigation buttons
@@ -914,5 +872,6 @@ const EstimateCreator = () => {
   );
 };
 
+// Make available globally
 window.EstimateCreator = EstimateCreator;
 </script>
