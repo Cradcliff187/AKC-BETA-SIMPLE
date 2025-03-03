@@ -1,136 +1,5 @@
 <script>
 (function() {
-  // === CreateCustomerForm Component ===
-  const CreateCustomerForm = ({ onSubmit, onCancel }) => {
-    const [formData, setFormData] = React.useState({
-      name: '',
-      email: '',
-      phone: '',
-      address: '',
-      city: '',
-      state: '',
-      zip: ''
-    });
-
-    const handleSubmit = (e) => {
-      e.preventDefault();
-      if (!formData.name.trim()) return;
-      onSubmit(formData);
-    };
-
-    // Phone number formatter
-    const formatPhoneNumber = (value) => {
-      const cleaned = value.replace(/\D/g, '');
-      if (cleaned.length >= 10) {
-        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6,10)}`;
-      } else if (cleaned.length > 6) {
-        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
-      } else if (cleaned.length > 3) {
-        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3)}`;
-      } else if (cleaned.length > 0) {
-        return `(${cleaned}`;
-      }
-      return cleaned;
-    };
-
-    return React.createElement('div', { className: 'space-y-4 bg-white p-6 rounded-lg shadow' },
-      React.createElement('h3', { className: 'text-lg font-semibold' }, 'Create New Customer'),
-      React.createElement('form', { onSubmit: handleSubmit, className: 'space-y-4' },
-        // Name field
-        React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Customer Name *'),
-          React.createElement('input', {
-            type: 'text',
-            required: true,
-            value: formData.name,
-            onChange: e => setFormData(prev => ({ ...prev, name: e.target.value })),
-            className: 'w-full p-2 border rounded'
-          })
-        ),
-        // Contact Info
-        React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Email'),
-            React.createElement('input', {
-              type: 'email',
-              value: formData.email,
-              onChange: e => setFormData(prev => ({ ...prev, email: e.target.value })),
-              className: 'w-full p-2 border rounded'
-            })
-          ),
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Phone'),
-            React.createElement('input', {
-              type: 'tel',
-              value: formData.phone,
-              onChange: e => setFormData(prev => ({ 
-                ...prev, 
-                phone: formatPhoneNumber(e.target.value)
-              })),
-              className: 'w-full p-2 border rounded'
-            })
-          )
-        ),
-        // Address fields
-        React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Address'),
-          React.createElement('input', {
-            type: 'text',
-            value: formData.address,
-            onChange: e => setFormData(prev => ({ ...prev, address: e.target.value })),
-            className: 'w-full p-2 border rounded'
-          })
-        ),
-        React.createElement('div', { className: 'grid grid-cols-3 gap-4' },
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'City'),
-            React.createElement('input', {
-              type: 'text',
-              value: formData.city,
-              onChange: e => setFormData(prev => ({ ...prev, city: e.target.value })),
-              className: 'w-full p-2 border rounded'
-            })
-          ),
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'State'),
-            React.createElement('input', {
-              type: 'text',
-              maxLength: 2,
-              value: formData.state,
-              onChange: e => setFormData(prev => ({ ...prev, state: e.target.value.toUpperCase() })),
-              className: 'w-full p-2 border rounded'
-            })
-          ),
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'ZIP'),
-            React.createElement('input', {
-              type: 'text',
-              maxLength: 5,
-              value: formData.zip,
-              onChange: e => setFormData(prev => ({ 
-                ...prev, 
-                zip: e.target.value.replace(/\D/g, '').slice(0, 5)
-              })),
-              className: 'w-full p-2 border rounded'
-            })
-          )
-        ),
-        // Buttons
-        React.createElement('div', { className: 'flex justify-end space-x-4 pt-4' },
-          React.createElement('button', {
-            type: 'button',
-            onClick: onCancel,
-            className: 'px-4 py-2 border rounded hover:bg-gray-50'
-          }, 'Cancel'),
-          React.createElement('button', {
-            type: 'submit',
-            className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700'
-          }, 'Create Customer')
-        )
-      )
-    );
-  };
-
   // === Standardized Loading Overlay ===
   const StandardLoadingOverlay = ({ message = 'Loading...' }) => {
     return React.createElement('div', {
@@ -191,7 +60,7 @@
         React.createElement('tbody', { className: 'bg-white divide-y divide-gray-200' },
           data.map(item => 
             React.createElement('tr', { 
-              key: item.customerId,
+              key: item.subId,
               onClick: () => onRowClick(item),
               className: 'hover:bg-gray-50 cursor-pointer'
             },
@@ -210,23 +79,155 @@
     );
   };
 
-  // === Main CustomerManagement Component ===
-  const CustomerManagement = ({ showMessage, loading: parentLoading, setLoading: setParentLoading }) => {
+  // === Create Subcontractor Form Component ===
+  const CreateSubcontractorForm = ({ onSubmit, onCancel }) => {
+    const [formData, setFormData] = React.useState({
+      subName: '',
+      address: '',
+      city: '',
+      state: '',
+      zip: '',
+      contactEmail: '',
+      phone: ''
+    });
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      if (!formData.subName.trim()) return;
+      onSubmit(formData);
+    };
+
+    // Phone number formatter
+    const formatPhoneNumber = (value) => {
+      const cleaned = value.replace(/\D/g, '');
+      if (cleaned.length >= 10) {
+        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6,10)}`;
+      } else if (cleaned.length > 6) {
+        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
+      } else if (cleaned.length > 3) {
+        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3)}`;
+      } else if (cleaned.length > 0) {
+        return `(${cleaned}`;
+      }
+      return cleaned;
+    };
+
+    return React.createElement('div', { className: 'space-y-4 bg-white p-6 rounded-lg shadow' },
+      React.createElement('h3', { className: 'text-lg font-semibold' }, 'Create New Subcontractor'),
+      React.createElement('form', { onSubmit: handleSubmit, className: 'space-y-4' },
+        // Subcontractor Name (required)
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Subcontractor Name *'),
+          React.createElement('input', {
+            type: 'text',
+            required: true,
+            value: formData.subName,
+            onChange: e => setFormData(prev => ({ ...prev, subName: e.target.value })),
+            className: 'w-full p-2 border rounded'
+          })
+        ),
+        // Address
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Address'),
+          React.createElement('input', {
+            type: 'text',
+            value: formData.address,
+            onChange: e => setFormData(prev => ({ ...prev, address: e.target.value })),
+            className: 'w-full p-2 border rounded'
+          })
+        ),
+        // City, State, Zip
+        React.createElement('div', { className: 'grid grid-cols-3 gap-4' },
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'City'),
+            React.createElement('input', {
+              type: 'text',
+              value: formData.city,
+              onChange: e => setFormData(prev => ({ ...prev, city: e.target.value })),
+              className: 'w-full p-2 border rounded'
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'State'),
+            React.createElement('input', {
+              type: 'text',
+              maxLength: 2,
+              value: formData.state,
+              onChange: e => setFormData(prev => ({ ...prev, state: e.target.value.toUpperCase() })),
+              className: 'w-full p-2 border rounded'
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'ZIP'),
+            React.createElement('input', {
+              type: 'text',
+              maxLength: 5,
+              value: formData.zip,
+              onChange: e => setFormData(prev => ({ 
+                ...prev, 
+                zip: e.target.value.replace(/\D/g, '').slice(0, 5)
+              })),
+              className: 'w-full p-2 border rounded'
+            })
+          )
+        ),
+        // Contact Info
+        React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Phone'),
+            React.createElement('input', {
+              type: 'tel',
+              value: formData.phone,
+              onChange: e => setFormData(prev => ({ 
+                ...prev, 
+                phone: formatPhoneNumber(e.target.value)
+              })),
+              className: 'w-full p-2 border rounded'
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Email'),
+            React.createElement('input', {
+              type: 'email',
+              value: formData.contactEmail,
+              onChange: e => setFormData(prev => ({ ...prev, contactEmail: e.target.value })),
+              className: 'w-full p-2 border rounded'
+            })
+          )
+        ),
+        // Buttons
+        React.createElement('div', { className: 'flex justify-end space-x-4 pt-4' },
+          React.createElement('button', {
+            type: 'button',
+            onClick: onCancel,
+            className: 'px-4 py-2 border rounded hover:bg-gray-50'
+          }, 'Cancel'),
+          React.createElement('button', {
+            type: 'submit',
+            className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700'
+          }, 'Create Subcontractor')
+        )
+      )
+    );
+  };
+
+  // === Main SubcontractorManagement Component ===
+  const SubcontractorManagement = ({ showMessage, loading: parentLoading, setLoading: setParentLoading }) => {
     // Remove local loading state, use parent's exclusively
     const setLoading = setParentLoading;
     const mountedRef = React.useRef(true);
 
-    // State for customers and filtering
-    const [customers, setCustomers] = React.useState([]);
-    const [filteredCustomers, setFilteredCustomers] = React.useState([]);
-    const [selectedCustomer, setSelectedCustomer] = React.useState(null);
+    // State management
+    const [subcontractors, setSubcontractors] = React.useState([]);
+    const [filteredSubcontractors, setFilteredSubcontractors] = React.useState([]);
+    const [selectedSubcontractor, setSelectedSubcontractor] = React.useState(null);
     const [viewMode, setViewMode] = React.useState('list');
     const [isCreating, setIsCreating] = React.useState(false);
     const [searchTerm, setSearchTerm] = React.useState('');
     const [statusFilter, setStatusFilter] = React.useState('All');
 
     // === Data Fetching with Better Error Handling ===
-    const fetchCustomers = React.useCallback(() => {
+    const fetchSubcontractors = React.useCallback(() => {
       if (!mountedRef.current) return;
       setLoading(true);
 
@@ -235,11 +236,11 @@
           .withSuccessHandler(response => {
             if (!mountedRef.current) return;
             if (response && response.success) {
-              setCustomers(response.data || []);
-              setFilteredCustomers(response.data || []);
+              setSubcontractors(response.data || []);
+              setFilteredSubcontractors(response.data || []);
               resolve(response.data);
             } else {
-              const error = response?.error || 'Failed to load customers';
+              const error = response?.error || 'Failed to load subcontractors';
               showMessage(error, 'error');
               reject(new Error(error));
             }
@@ -247,12 +248,12 @@
           })
           .withFailureHandler(error => {
             if (!mountedRef.current) return;
-            console.error('Error fetching customers:', error);
-            showMessage('Failed to load customers', 'error');
+            console.error('Error fetching subcontractors:', error);
+            showMessage('Failed to load subcontractors', 'error');
             setLoading(false);
             reject(error);
           })
-          .getCustomersForClient();
+          .getSubcontractorsForClient();
       });
     }, [setLoading, showMessage]);
 
@@ -265,44 +266,44 @@
 
     // Initial fetch with error boundary
     React.useEffect(() => {
-      fetchCustomers().catch(error => {
-        console.error('Error in initial customer fetch:', error);
+      fetchSubcontractors().catch(error => {
+        console.error('Error in initial subcontractor fetch:', error);
       });
-    }, [fetchCustomers]);
+    }, [fetchSubcontractors]);
 
     // === Search and Filter Effect ===
     React.useEffect(() => {
-      let filtered = [...customers];
+      let filtered = [...subcontractors];
       
       if (searchTerm.trim()) {
         const searchLower = searchTerm.toLowerCase();
-        filtered = filtered.filter(customer => 
-          customer.name.toLowerCase().includes(searchLower) ||
-          customer.customerId.toLowerCase().includes(searchLower) ||
-          customer.email?.toLowerCase().includes(searchLower) ||
-          customer.phone?.includes(searchTerm)
+        filtered = filtered.filter(sub => 
+          sub.subName.toLowerCase().includes(searchLower) ||
+          sub.subId.toLowerCase().includes(searchLower) ||
+          sub.contactEmail?.toLowerCase().includes(searchLower) ||
+          sub.phone?.includes(searchTerm)
         );
       }
 
       if (statusFilter !== 'All') {
-        filtered = filtered.filter(customer => customer.status === statusFilter);
+        filtered = filtered.filter(sub => sub.status === statusFilter);
       }
 
-      setFilteredCustomers(filtered);
-    }, [searchTerm, statusFilter, customers]);
+      setFilteredSubcontractors(filtered);
+    }, [searchTerm, statusFilter, subcontractors]);
 
     // === Handlers ===
-    const handleCreateCustomer = async (formData) => {
+    const handleCreateSubcontractor = async (formData) => {
       setLoading(true);
       
       try {
         const cleanedData = {
-          name: formData.name.trim(),
+          subName: formData.subName.trim(),
           address: formData.address.trim(),
           city: formData.city.trim(),
           state: formData.state.trim(),
           zip: formData.zip.trim(),
-          email: formData.email.trim(),
+          contactEmail: formData.contactEmail.trim(),
           phone: formatPhoneNumber(formData.phone)
         };
 
@@ -310,26 +311,26 @@
           google.script.run
             .withSuccessHandler(result => {
               if (result === null) {
-                // Handle null response by fetching latest customers
+                // Handle null response by fetching latest subcontractors
                 google.script.run
-                  .withSuccessHandler(customersResult => {
-                    if (customersResult && customersResult.success) {
-                      // Find our newly created customer
-                      const foundCustomer = customersResult.data.find(c => 
-                        c.name === cleanedData.name &&
-                        c.address === cleanedData.address
+                  .withSuccessHandler(subcontractorsResult => {
+                    if (subcontractorsResult && subcontractorsResult.success) {
+                      // Find our newly created subcontractor
+                      const foundSubcontractor = subcontractorsResult.data.find(s => 
+                        s.subName === cleanedData.subName &&
+                        s.address === cleanedData.address
                       );
-                      if (foundCustomer) {
-                        resolve({ success: true, data: foundCustomer });
+                      if (foundSubcontractor) {
+                        resolve({ success: true, data: foundSubcontractor });
                       } else {
-                        reject(new Error('Could not verify customer creation'));
+                        reject(new Error('Could not verify subcontractor creation'));
                       }
                     } else {
-                      reject(new Error('Failed to verify customer creation'));
+                      reject(new Error('Failed to verify subcontractor creation'));
                     }
                   })
                   .withFailureHandler(error => reject(error))
-                  .getCustomersForClient();
+                  .getSubcontractorsForClient();
               } else if (result && result.success) {
                 resolve(result);
               } else {
@@ -338,21 +339,21 @@
             })
             .withFailureHandler(error => {
               console.error('Server error:', error);
-              reject(new Error(error.message || 'Failed to create customer'));
+              reject(new Error(error.message || 'Failed to create subcontractor'));
             })
-            .createCustomer(cleanedData);
+            .createSubcontractor(cleanedData);
         });
 
         if (response.success) {
-          showMessage('Customer created successfully', 'success');
+          showMessage('Subcontractor created successfully', 'success');
           setIsCreating(false);
-          fetchCustomers(); // Refresh list
+          fetchSubcontractors(); // Refresh list
         } else {
-          throw new Error(response.error || 'Failed to create customer');
+          throw new Error(response.error || 'Failed to create subcontractor');
         }
       } catch (error) {
-        console.error('Error creating customer:', error);
-        showMessage(error.message || 'Error creating customer', 'error');
+        console.error('Error creating subcontractor:', error);
+        showMessage(error.message || 'Error creating subcontractor', 'error');
       } finally {
         setLoading(false);
       }
@@ -373,150 +374,17 @@
       return cleaned;
     };
 
-    // === Render Methods ===
-    const renderHeader = () => {
-      return React.createElement('div', { 
-        className: 'flex flex-col sm:flex-row justify-between items-center gap-4 mb-6' 
-      },
-        React.createElement('h2', { 
-          className: 'text-xl sm:text-2xl font-bold text-gray-900' 
-        }, 'Customer Management'),
-        React.createElement('button', {
-          onClick: () => setIsCreating(true),
-          className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700'
-        }, 'Add New Customer')
-      );
-    };
-
-    const renderControls = () => {
-      return React.createElement('div', { className: 'flex flex-col sm:flex-row justify-between gap-4 mb-6' },
-        // Search and filters group
-        React.createElement('div', { className: 'flex flex-col sm:flex-row gap-4' },
-          React.createElement('input', {
-            type: 'text',
-            placeholder: 'Search customers...',
-            value: searchTerm,
-            onChange: e => setSearchTerm(e.target.value),
-            className: 'p-2 border rounded w-full sm:w-64'
-          }),
-          React.createElement('select', {
-            value: statusFilter,
-            onChange: e => setStatusFilter(e.target.value),
-            className: 'p-2 border rounded w-full sm:w-auto'
-          },
-            React.createElement('option', { value: 'All' }, 'All Statuses'),
-            React.createElement('option', { value: 'Active' }, 'Active'),
-            React.createElement('option', { value: 'Inactive' }, 'Inactive')
-          )
-        )
-      );
-    };
-
-    // Render customer details view
-    const renderCustomerDetails = () => {
-      if (!selectedCustomer) return null;
-
-      return React.createElement('div', { className: 'space-y-6' },
-        // Header with back button
-        React.createElement('div', { 
-          className: 'flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6' 
-        },
-          React.createElement('h3', { className: 'text-xl font-bold' }, 
-            `${selectedCustomer.name} Details`
-          ),
-          React.createElement('button', {
-            onClick: () => {
-              setSelectedCustomer(null);
-              setViewMode('list');
-            },
-            className: 'inline-flex items-center text-blue-600 hover:text-blue-800'
-          }, 
-            React.createElement('span', { className: 'mr-2' }, '←'),
-            'Back to List'
-          )
-        ),
-
-        // Contact Information Card
-        React.createElement('div', { className: 'bg-white p-4 sm:p-6 rounded-lg shadow-sm' },
-          React.createElement('h4', { className: 'font-semibold mb-4' }, 'Contact Information'),
-          React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-4' },
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Email:'),
-              React.createElement('p', null, selectedCustomer.email || 'N/A')
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Phone:'),
-              React.createElement('p', null, selectedCustomer.phone || 'N/A')
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Address:'),
-              React.createElement('p', null, 
-                [
-                  selectedCustomer.address, 
-                  selectedCustomer.city, 
-                  selectedCustomer.state, 
-                  selectedCustomer.zip
-                ].filter(Boolean).join(', ') || 'N/A'
-              )
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Status:'),
-              React.createElement('p', null, selectedCustomer.status || 'Unknown')
-            )
-          )
-        ),
-
-        // Metrics Card
-        React.createElement('div', { className: 'bg-white p-4 sm:p-6 rounded-lg shadow-sm' },
-          React.createElement('h4', { className: 'font-semibold mb-4' }, 'Customer Metrics'),
-          React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4' },
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Total Projects:'),
-              React.createElement('p', { className: 'text-lg font-semibold' }, 
-                selectedCustomer.metrics?.totalProjects || 0
-              )
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Active Projects:'),
-              React.createElement('p', { className: 'text-lg font-semibold' }, 
-                selectedCustomer.metrics?.activeProjects || 0
-              )
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Total Revenue:'),
-              React.createElement('p', { className: 'text-lg font-semibold' }, 
-                new Intl.NumberFormat('en-US', {
-                  style: 'currency',
-                  currency: 'USD'
-                }).format(selectedCustomer.metrics?.totalRevenue || 0)
-              )
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Avg Project Value:'),
-              React.createElement('p', { className: 'text-lg font-semibold' }, 
-                new Intl.NumberFormat('en-US', {
-                  style: 'currency',
-                  currency: 'USD'
-                }).format(selectedCustomer.metrics?.averageProjectValue || 0)
-              )
-            )
-          )
-        )
-      );
-    };
-
-    // Export functionality
-    const exportCustomerData = () => {
-      const exportData = filteredCustomers.map(customer => ({
-        'Customer ID': customer.customerId,
-        'Name': customer.name,
-        'Email': customer.email,
-        'Phone': customer.phone,
-        'Total Projects': customer.metrics?.totalProjects || 0,
-        'Active Projects': customer.metrics?.activeProjects || 0,
-        'Total Revenue': customer.metrics?.totalRevenue || 0,
-        'Average Project Value': customer.metrics?.averageProjectValue || 0,
-        'Status': customer.status || 'N/A'
+    // === Export Functionality ===
+    const exportSubcontractorData = () => {
+      const exportData = filteredSubcontractors.map(sub => ({
+        'Subcontractor ID': sub.subId,
+        'Name': sub.subName,
+        'Email': sub.contactEmail,
+        'Phone': sub.phone,
+        'Total Projects': sub.metrics?.totalProjects || 0,
+        'Active Projects': sub.metrics?.activeProjects || 0,
+        'Total Revenue': sub.metrics?.totalRevenue || 0,
+        'Status': sub.status || 'N/A'
       }));
 
       // Convert to CSV
@@ -536,7 +404,7 @@
       if (link.download !== undefined) {
         const url = URL.createObjectURL(blob);
         link.setAttribute('href', url);
-        link.setAttribute('download', `customer_data_${new Date().toISOString()}.csv`);
+        link.setAttribute('download', `subcontractor_data_${new Date().toISOString()}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
@@ -544,46 +412,178 @@
       }
     };
 
+    // === Render Methods ===
+    const renderHeader = () => {
+      return React.createElement('div', { 
+        className: 'flex flex-col sm:flex-row justify-between items-center gap-4 mb-6' 
+      },
+        React.createElement('h2', { 
+          className: 'text-xl sm:text-2xl font-bold text-gray-900' 
+        }, 'Subcontractor Management'),
+        React.createElement('button', {
+          onClick: () => setIsCreating(true),
+          className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700'
+        }, 'Add New Subcontractor')
+      );
+    };
+
+    const renderControls = () => {
+      return React.createElement('div', { className: 'flex flex-col sm:flex-row justify-between gap-4 mb-6' },
+        // Search and filters group
+        React.createElement('div', { className: 'flex flex-col sm:flex-row gap-4' },
+          React.createElement('input', {
+            type: 'text',
+            placeholder: 'Search subcontractors...',
+            value: searchTerm,
+            onChange: e => setSearchTerm(e.target.value),
+            className: 'p-2 border rounded w-full sm:w-64'
+          }),
+          React.createElement('select', {
+            value: statusFilter,
+            onChange: e => setStatusFilter(e.target.value),
+            className: 'p-2 border rounded w-full sm:w-auto'
+          },
+            React.createElement('option', { value: 'All' }, 'All Statuses'),
+            React.createElement('option', { value: 'Active' }, 'Active'),
+            React.createElement('option', { value: 'Inactive' }, 'Inactive')
+          )
+        )
+      );
+    };
+
+    // Render subcontractor details view
+    const renderSubcontractorDetails = () => {
+      if (!selectedSubcontractor) return null;
+
+      return React.createElement('div', { className: 'space-y-6' },
+        // Header with back button
+        React.createElement('div', { 
+          className: 'flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6' 
+        },
+          React.createElement('h3', { className: 'text-xl font-bold' }, 
+            `${selectedSubcontractor.subName} Details`
+          ),
+          React.createElement('button', {
+            onClick: () => {
+              setSelectedSubcontractor(null);
+              setViewMode('list');
+            },
+            className: 'inline-flex items-center text-blue-600 hover:text-blue-800'
+          }, 
+            React.createElement('span', { className: 'mr-2' }, '←'),
+            'Back to List'
+          )
+        ),
+
+        // Contact Information Card
+        React.createElement('div', { className: 'bg-white p-4 sm:p-6 rounded-lg shadow-sm' },
+          React.createElement('h4', { className: 'font-semibold mb-4' }, 'Contact Information'),
+          React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-4' },
+            React.createElement('div', null,
+              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Email:'),
+              React.createElement('p', null, selectedSubcontractor.contactEmail || 'N/A')
+            ),
+            React.createElement('div', null,
+              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Phone:'),
+              React.createElement('p', null, selectedSubcontractor.phone || 'N/A')
+            ),
+            React.createElement('div', null,
+              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Address:'),
+              React.createElement('p', null, 
+                [
+                  selectedSubcontractor.address, 
+                  selectedSubcontractor.city, 
+                  selectedSubcontractor.state, 
+                  selectedSubcontractor.zip
+                ].filter(Boolean).join(', ') || 'N/A'
+              )
+            ),
+            React.createElement('div', null,
+              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Status:'),
+              React.createElement('p', null, selectedSubcontractor.status || 'Unknown')
+            )
+          )
+        ),
+
+        // Subcontractor Metrics Card
+        React.createElement('div', { className: 'bg-white p-4 sm:p-6 rounded-lg shadow-sm' },
+          React.createElement('h4', { className: 'font-semibold mb-4' }, 'Subcontractor Metrics'),
+          React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4' },
+            React.createElement('div', null,
+              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Total Projects:'),
+              React.createElement('p', { className: 'text-lg font-semibold' }, 
+                selectedSubcontractor.metrics?.totalProjects || 0
+              )
+            ),
+            React.createElement('div', null,
+              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Active Projects:'),
+              React.createElement('p', { className: 'text-lg font-semibold' }, 
+                selectedSubcontractor.metrics?.activeProjects || 0
+              )
+            ),
+            React.createElement('div', null,
+              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Total Revenue:'),
+              React.createElement('p', { className: 'text-lg font-semibold' }, 
+                new Intl.NumberFormat('en-US', {
+                  style: 'currency',
+                  currency: 'USD'
+                }).format(selectedSubcontractor.metrics?.totalRevenue || 0)
+              )
+            ),
+            React.createElement('div', null,
+              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Avg Project Value:'),
+              React.createElement('p', { className: 'text-lg font-semibold' }, 
+                new Intl.NumberFormat('en-US', {
+                  style: 'currency',
+                  currency: 'USD'
+                }).format(selectedSubcontractor.metrics?.averageProjectValue || 0)
+              )
+            )
+          )
+        )
+      );
+    };
+
     // Render the main view
     return React.createElement('div', { className: 'relative' },
       isCreating
-        ? React.createElement(CreateCustomerForm, {
-            onSubmit: handleCreateCustomer,
+        ? React.createElement(CreateSubcontractorForm, {
+            onSubmit: handleCreateSubcontractor,
             onCancel: () => setIsCreating(false)
           })
         : React.createElement('div', { className: 'space-y-6' },
             renderHeader(),
             viewMode === 'details'
-              ? renderCustomerDetails()
+              ? renderSubcontractorDetails()
               : React.createElement(React.Fragment, null,
                   renderControls(),
                   React.createElement('div', { className: 'flex justify-end mb-4' },
                     React.createElement('button', {
-                      onClick: exportCustomerData,
+                      onClick: exportSubcontractorData,
                       className: 'px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700'
                     }, 'Export CSV')
                   ),
                   React.createElement(StandardTable, {
                     columns: [
-                      { key: 'customerId', label: 'ID' },
-                      { key: 'name', label: 'Name' },
-                      { key: 'email', label: 'Email' },
+                      { key: 'subId', label: 'ID' },
+                      { key: 'subName', label: 'Name' },
+                      { key: 'contactEmail', label: 'Email' },
                       { key: 'phone', label: 'Phone' },
                       { 
                         key: 'status', 
                         label: 'Status', 
-                        render: (customer) => React.createElement('span', {
+                        render: (sub) => React.createElement('span', {
                           className: `px-2 py-1 rounded text-xs ${
-                            customer.status === 'Active' ? 'bg-green-100 text-green-800' :
-                            customer.status === 'Inactive' ? 'bg-red-100 text-red-800' :
+                            sub.status === 'Active' ? 'bg-green-100 text-green-800' :
+                            sub.status === 'Inactive' ? 'bg-red-100 text-red-800' :
                             'bg-gray-100 text-gray-800'
                           }`
-                        }, customer.status || 'Unknown')
+                        }, sub.status || 'Unknown')
                       }
                     ],
-                    data: filteredCustomers,
-                    onRowClick: (customer) => {
-                      setSelectedCustomer(customer);
+                    data: filteredSubcontractors,
+                    onRowClick: (sub) => {
+                      setSelectedSubcontractor(sub);
                       setViewMode('details');
                     }
                   })
@@ -594,7 +594,7 @@
 
   // Export to global window object
   if (typeof window !== 'undefined') {
-    window.CustomerManagement = CustomerManagement;
+    window.SubcontractorManagement = SubcontractorManagement;
   }
 })();
 </script>

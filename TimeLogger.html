@@ -1,12 +1,6 @@
 <script>
 const TimeLogger = () => {
-  const [date, setDate] = React.useState(() => {
-    try {
-      return google.script.run.withSuccessHandler(d => setDate(d)).getTodayDate();
-    } catch (e) {
-      return new Date().toISOString().split('T')[0]; // Fallback if server call fails
-    }
-  });
+  const [date, setDate] = React.useState(''); // Changed from undefined default
   const [startTime, setStartTime] = React.useState('');
   const [endTime, setEndTime] = React.useState('');
   const [projects, setProjects] = React.useState([]);
@@ -16,36 +10,82 @@ const TimeLogger = () => {
   const [loading, setLoading] = React.useState(false);
   const [hours, setHours] = React.useState(0);
   const mountedRef = React.useRef(true);
+  const [showProjectConfirmation, setShowProjectConfirmation] = React.useState(false);
+  const [projectConfirmed, setProjectConfirmed] = React.useState(false);
 
   React.useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
 
-  // Fetch projects on mount
+  // Update date initialization
+  React.useEffect(() => {
+    const initDate = async () => {
+      try {
+        const today = await new Promise(resolve => {
+          google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(() => resolve(new Date().toISOString().split('T')[0]))
+            .getTodayDate();
+        });
+        if (mountedRef.current) {
+          setDate(today);
+        }
+      } catch (error) {
+        console.error('Error getting date:', error);
+        if (mountedRef.current) {
+          setDate(new Date().toISOString().split('T')[0]);
+        }
+      }
+    };
+    initDate();
+  }, []);
+
+  // Update projects fetch with better error handling
   React.useEffect(() => {
     const fetchProjects = async () => {
       if (!mountedRef.current) return;
       try {
-        const response = await new Promise(resolve => {
+        console.log('Fetching projects...');
+        const response = await new Promise((resolve, reject) => {
           google.script.run
-            .withSuccessHandler(resolve)
-            .withFailureHandler(err => resolve({ success: false, error: err.message }))
+            .withSuccessHandler(result => {
+              console.log('Raw server response:', result);
+              if (!result) {
+                reject(new Error('Server returned null response'));
+                return;
+              }
+              resolve(result);
+            })
+            .withFailureHandler(err => {
+              console.error('Server error:', err);
+              reject(new Error(err.message || 'Failed to fetch projects'));
+            })
             .getProjects();
         });
-        if (mountedRef.current) {
-          if (response.success) {
-            setProjects(response.data);
-          } else {
-            showMessage(response.error || 'Failed to load projects', 'error');
+
+        if (!mountedRef.current) return;
+
+        if (response && response.success && Array.isArray(response.data)) {
+          console.log(`Setting ${response.data.length} projects`);
+          setProjects(response.data);
+          // Show message if no projects found
+          if (response.data.length === 0) {
+            showMessage('No active projects available', 'info');
           }
+        } else {
+          const errorMsg = (response && response.error) || 'Invalid server response';
+          console.error('Invalid projects response:', errorMsg);
+          showMessage(errorMsg, 'error');
         }
       } catch (error) {
+        console.error('Error in fetchProjects:', error);
         if (mountedRef.current) {
-          showMessage('Failed to load projects', 'error');
+          showMessage(error.message || 'Failed to load projects', 'error');
         }
       }
     };
+
     fetchProjects();
   }, []);
 
@@ -78,6 +118,9 @@ const TimeLogger = () => {
           setForUserEmail('');
           setMessage({ text: '', type: '' });
           setHours(0);
+          // Add these two lines to reset confirmation state
+          setShowProjectConfirmation(false);
+          setProjectConfirmed(false);
         }
       })
       .getTodayDate();
@@ -86,6 +129,11 @@ const TimeLogger = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!mountedRef.current) return;
+
+    if (!projectConfirmed) {
+      showMessage('Please confirm project details before submitting', 'error');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -140,6 +188,17 @@ const TimeLogger = () => {
       }
     }
     return options;
+  };
+
+  const handleProjectSelect = (projectId) => {
+    setSelectedProject(projectId);
+    setShowProjectConfirmation(true);
+    setProjectConfirmed(false);
+  };
+
+  const handleProjectConfirm = () => {
+    setShowProjectConfirmation(false);
+    setProjectConfirmed(true);
   };
 
   return React.createElement('div', { className: 'max-w-2xl mx-auto p-4' },
@@ -198,8 +257,8 @@ const TimeLogger = () => {
         React.createElement('div', null,
           React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Project:'),
           React.createElement('select', {
-            value: selectedProject,
-            onChange: e => setSelectedProject(e.target.value),
+            value: selectedProject || '', // Use just the ID
+            onChange: e => handleProjectSelect(e.target.value),
             className: 'w-full p-2 border rounded',
             required: true
           },
@@ -209,9 +268,27 @@ const TimeLogger = () => {
                 key: project.id,
                 value: project.id
               }, 
-                `${project.projectId} - ${project.name}${project.jobId ? ` (Job: ${project.jobId})` : ''} - ${project.status}`
+                `${project.projectId} - ${project.name}`  // Simplified format
               )
             )
+          ),
+          // Show ProjectDetailsConfirmation when not confirmed
+          showProjectConfirmation && selectedProject && 
+            React.createElement(ProjectDetailsConfirmation, {
+              project: projects.find(p => p.id === selectedProject),
+              onConfirm: handleProjectConfirm
+            }),
+          // Show simple confirmation message when confirmed
+          projectConfirmed && React.createElement('div', {
+            className: 'mt-2 text-green-600 text-sm flex items-center'
+          }, 
+            '✓ Project details confirmed ',
+            // Add a "View Details" button
+            React.createElement('button', {
+              type: 'button',
+              onClick: () => setShowProjectConfirmation(true),
+              className: 'ml-2 text-blue-600 hover:text-blue-800 text-sm underline'
+            }, '(View Details)')
           )
         ),
         // ForUserEmail
@@ -237,4 +314,60 @@ const TimeLogger = () => {
     )
   );
 };
+
+const ProjectDetailsConfirmation = ({ project, onConfirm }) => {
+  if (!project) return null;
+
+  // Create a properly formatted site location object from direct fields
+  const siteLocation = {
+    address: project.siteLocationAddress || '',
+    city: project.siteLocationCity || '',
+    state: project.siteLocationState || '',
+    zip: project.siteLocationZip || ''
+  };
+
+  // Check if there's any site location data
+  const hasSiteLocation = siteLocation.address || siteLocation.city || siteLocation.state || siteLocation.zip;
+
+  return React.createElement('div', {
+    className: 'mt-4 p-4 bg-gray-50 border rounded-lg shadow-sm'
+  },
+    React.createElement('h4', { 
+      className: 'text-lg font-medium mb-3 text-gray-700' 
+    }, 'Please Confirm Project Details:'),
+    
+    React.createElement('div', { className: 'space-y-2 mb-4' },
+      React.createElement('div', null,
+        React.createElement('span', { className: 'font-medium' }, 'Customer: '),
+        React.createElement('span', null, project.customerName || 'N/A')
+      ),
+      React.createElement('div', null,
+        React.createElement('span', { className: 'font-medium' }, 'Job Description: '),
+        React.createElement('span', null, project.jobDescription || 'N/A')
+      ),
+      React.createElement('div', null,
+        React.createElement('span', { className: 'font-medium' }, 'Site Location: '),
+        React.createElement('div', { className: 'pl-4 text-gray-600' },
+          hasSiteLocation ? [
+            siteLocation.address && React.createElement('div', { key: 'address' }, siteLocation.address),
+            React.createElement('div', { key: 'citystatezip' }, 
+              [siteLocation.city, siteLocation.state, siteLocation.zip]
+                .filter(Boolean)
+                .join(', ')
+            )
+          ] : React.createElement('div', null, 'No site location provided')
+        )
+      )
+    ),
+    
+    React.createElement('button', {
+      type: 'button',
+      onClick: onConfirm,
+      className: 'w-full p-2 bg-green-600 text-white rounded hover:bg-green-700'
+    }, 'Confirm Project Details ✓')
+  );
+};
+
+// Expose to window - ensure proper loading in Index.html
+window.TimeLogger = TimeLogger;
 </script>

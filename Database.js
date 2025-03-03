@@ -21,37 +21,40 @@ function getSheet(sheetName) {
 function getActiveProjects() {
   const { headers, rows } = getSheetData(CONFIG.SHEETS.PROJECTS);
 
-  // Column indexes
   const projectIdCol = headers.indexOf("ProjectID");
   const projectNameCol = headers.indexOf("ProjectName");
   const statusCol = headers.indexOf("Status");
+  const customerNameCol = headers.indexOf("CustomerName");
   const folderIdCol = headers.indexOf("FolderID");
   const jobIdCol = headers.indexOf("JobID");
   const estimatesFolderCol = headers.indexOf("EstimatesFolderID");
   const materialsFolderCol = headers.indexOf("MaterialsFolderID");
   const subInvoicesFolderCol = headers.indexOf("SubInvoicesFolderID");
+  const docUrlCol = headers.indexOf("DocUrl");
+  const jobDescriptionCol = headers.indexOf("JobDescription");
+  const siteLocationAddressCol = headers.indexOf("SiteLocationAddress");
+  const siteLocationCityCol = headers.indexOf("SiteLocationCity");
+  const siteLocationStateCol = headers.indexOf("SiteLocationState");
+  const siteLocationZipCol = headers.indexOf("SiteLocationZip");
 
-  if ([
-    projectIdCol, projectNameCol, statusCol, folderIdCol,
-    estimatesFolderCol, materialsFolderCol, subInvoicesFolderCol,
-    jobIdCol
-  ].includes(-1)) {
-    throw new Error("Required columns not found in Projects sheet");
-  }
-
-  return rows
-    .filter(row => MODULE_ACCESS_STATUSES.includes(row[statusCol]))
-    .map(row => ({
-      id: row[projectIdCol],
-      projectId: row[projectIdCol],
-      name: row[projectNameCol],
-      status: row[statusCol],
-      jobId: row[jobIdCol] || '',
-      folderId: row[folderIdCol],
-      estimatesFolderId: row[estimatesFolderCol],
-      materialsFolderId: row[materialsFolderCol],
-      subInvoicesFolderId: row[subInvoicesFolderCol]
-    }));
+  return rows.map(row => ({
+    id: row[projectIdCol],
+    projectId: row[projectIdCol],
+    name: row[projectNameCol],
+    status: row[statusCol],
+    jobId: row[jobIdCol] || '',
+    folderId: row[folderIdCol],
+    estimatesFolderId: row[estimatesFolderCol],
+    materialsFolderId: row[materialsFolderCol],
+    subInvoicesFolderId: row[subInvoicesFolderCol],
+    docUrl: row[docUrlCol] || `https://drive.google.com/drive/folders/${row[folderIdCol]}`,
+    customerName: row[customerNameCol] || '',
+    jobDescription: row[jobDescriptionCol] || '',
+    siteLocationAddress: row[siteLocationAddressCol] || '',
+    siteLocationCity: row[siteLocationCityCol] || '',
+    siteLocationState: row[siteLocationStateCol] || '',
+    siteLocationZip: row[siteLocationZipCol] || ''
+  }));
 }
 
 function createProjectRecord(data) {
@@ -81,20 +84,26 @@ function createProjectRecord(data) {
 
     // Ensure the project is created with an explicit initial status
     const rowData = [
-      projectId,             // ProjectID
-      data.customerId,       // CustomerID
-      data.projectName,      // ProjectName
-      initialStatus,         // Status - explicitly set
-      folderId,             // Main folder
-      now,                   // CreatedOn
-      userEmail,            // CreatedBy
-      '',                   // JobID
-      now,                  // LastModified
-      userEmail,            // LastModifiedBy
-      estimatesFolderId,    // EstimatesFolderID
-      materialsFolderId,    // MaterialsFolderID
-      subInvoicesFolderId,  // SubInvoicesFolderID
-      `https://drive.google.com/drive/folders/${folderId}`  // DocUrl - NEW
+      projectId,                          // ProjectID          - 1
+      data.customerId,                    // CustomerID         - 2
+      data.projectName,                   // ProjectName        - 3
+      initialStatus,                      // Status             - 4
+      folderId,                          // FolderID           - 5
+      now,                               // CreatedOn          - 6
+      userEmail,                         // CreatedBy          - 7
+      '',                                // JobID              - 8
+      now,                               // LastModified       - 9
+      userEmail,                         // LastModifiedBy     - 10
+      estimatesFolderId,                 // EstimatesFolderID  - 11
+      materialsFolderId,                 // MaterialsFolderID  - 12
+      subInvoicesFolderId,              // SubInvoicesFolderID- 13
+      `https://drive.google.com/drive/folders/${folderId}`,  // DocURL - 14
+      data.customerName || '',           // CustomerName       - 15
+      data.jobDescription || '',         // JobDescription    - 16
+      data.siteLocationAddress || '',    // SiteLocationAddress- 17
+      data.siteLocationCity || '',       // SiteLocationCity   - 18
+      data.siteLocationState || '',       // SiteLocationState- 19
+      data.siteLocationZip || ''         // SiteLocationZip   - 20
     ];
 
     sheet.appendRow(rowData);
@@ -120,19 +129,37 @@ function createProjectRecord(data) {
         folderId,
         createdOn: now.toISOString(),
         createdBy: userEmail,
-        folders: {
+        docUrl: `https://drive.google.com/drive/folders/${folderId}`,  // Add to return data
+        folders: {  // Move folders inside data object
           main: folderId,
           estimates: estimatesFolderId,
           materials: materialsFolderId,
           subInvoices: subInvoicesFolderId
-        },
-        docUrl: `https://drive.google.com/drive/folders/${folderId}`  // Add to return data
+        }
       }
     };
   } catch (error) {
     Logger.log(`Error in createProjectRecord: ${error.message}`);
     throw error;
   }
+}
+
+function getProjectsByStatus(status) {
+  const { headers, rows } = getSheetData(CONFIG.SHEETS.PROJECTS);
+  
+  const projectIdCol = headers.indexOf("ProjectID");
+  const projectNameCol = headers.indexOf("ProjectName");
+  const statusCol = headers.indexOf("Status");
+  const customerNameCol = headers.indexOf("CustomerName");
+  
+  return rows
+    .filter(row => row[statusCol] === status)
+    .map(row => ({
+      projectId: row[projectIdCol],
+      name: row[projectNameCol],
+      status: row[statusCol],
+      customerName: row[customerNameCol] || ''
+    }));
 }
 
 // ==========================================
@@ -144,7 +171,6 @@ function logTime(data) {
   if (!sheet) throw new Error("Time Logs sheet not found");
 
   const timeLogId = "TL" + new Date().getTime();
-
   sheet.appendRow([
     timeLogId,
     data.projectId,
@@ -169,7 +195,6 @@ function logMaterialsReceipt(data) {
   if (!sheet) throw new Error("Materials Receipts sheet not found");
 
   const receiptId = "MATREC-" + new Date().getTime();
-
   sheet.appendRow([
     receiptId,
     data.projectId,
@@ -211,6 +236,13 @@ function getSubcontractors() {
   // Looks specifically for these column headers:
   const subIdCol = headers.indexOf("SubID");         // e.g. "Sub-001"
   const subNameCol = headers.indexOf("SubName");     // e.g. "John's Plumbing"
+  const addressCol = headers.indexOf("Address");
+  const cityCol = headers.indexOf("City");
+  const stateCol = headers.indexOf("State");
+  const zipCol = headers.indexOf("Zip");
+  const emailCol = headers.indexOf("ContactEmail");
+  const phoneCol = headers.indexOf("Phone");
+  const statusCol = headers.indexOf("Status");
   
   if (subIdCol === -1 || subNameCol === -1) {
     throw new Error("Required columns not found in Subcontractors sheet");
@@ -219,7 +251,14 @@ function getSubcontractors() {
   // Returns array of objects with this structure:
   return rows.map(row => ({
     subId: row[subIdCol],
-    subName: row[subNameCol]
+    subName: row[subNameCol],
+    address: row[addressCol],
+    city: row[cityCol],
+    state: row[stateCol],
+    zip: row[zipCol],
+    contactEmail: row[emailCol],
+    phone: row[phoneCol],
+    status: row[statusCol] || 'Active'
   }));
 }
 
@@ -228,7 +267,6 @@ function logSubInvoice(data) {
   if (!sheet) throw new Error("Subinvoices sheet not found");
 
   const invoiceId = "SUBINV-" + new Date().getTime();
-
   sheet.appendRow([
     invoiceId,
     data.projectId,
@@ -248,41 +286,51 @@ function createSubcontractor(data) {
   const sheet = getSheet(CONFIG.SHEETS.SUBCONTRACTORS);
   if (!sheet) throw new Error("Subcontractors sheet not found");
 
-  const newSubId = getNextSubId(sheet);
+  try {
+    const newSubId = getNextSubId(sheet);
 
-  sheet.appendRow([
-    newSubId,
-    data.subName || '',
-    data.address || '',
-    data.city || '',
-    data.state || '',
-    data.zip || '',
-    data.contactEmail || '',
-    data.phone || '',
-    'Sub'  // QbVendorType - Always 'Sub' for subcontractors
-  ]);
+    sheet.appendRow([
+      newSubId,
+      data.subName || '',
+      data.address || '',
+      data.city || '',
+      data.state || '',
+      data.zip || '',
+      data.contactEmail || '',
+      data.phone || '',
+      'Sub'  // QbVendorType - Always 'Sub' for subcontractors
+    ]);
 
-  return {
-    subId: newSubId,
-    subName: data.subName || '',
-    address: data.address || '',
-    city: data.city || '',
-    state: data.state || '',
-    zip: data.zip || '',
-    contactEmail: data.contactEmail || '',
-    phone: data.phone || '',
-    qbVendorType: 'Sub'
-  };
+    // Return standardized response format
+    return {
+      success: true,
+      data: {
+        subId: newSubId,
+        subName: data.subName || '',
+        address: data.address || '',
+        city: data.city || '',
+        state: data.state || '',
+        zip: data.zip || '',
+        contactEmail: data.contactEmail || '',
+        phone: data.phone || '',
+        qbVendorType: 'Sub'
+      }
+    };
+  } catch (error) {
+    Logger.log('Error in createSubcontractor:', error.message);
+    return {
+      success: false,
+      error: error.message || 'Failed to create subcontractor'
+    };
+  }
 }
 
 // ==========================================
 // CUSTOMER FUNCTIONS
 // ==========================================
 
-// In Database.gs
 function getCustomerData() {
   const { headers, rows } = getSheetData(CONFIG.SHEETS.CUSTOMERS);
-  
   const customerIdCol = headers.indexOf("CustomerID");
   const nameCol = headers.indexOf("CustomerName");
   const addressCol = headers.indexOf("Address");
@@ -297,14 +345,14 @@ function getCustomerData() {
   const validCustomers = rows.filter(row => {
     const customerId = row[customerIdCol];
     const customerName = row[nameCol];
-    
+
     // Skip rows with invalid or undefined IDs
     if (!customerId || 
         customerId.toString().includes('undefined') || 
         customerId.toString().trim() === '') {
       return false;
     }
-    
+
     // Skip rows with missing names
     if (!customerName || customerName.toString().trim() === '') {
       return false;
@@ -320,7 +368,7 @@ function getCustomerData() {
     zip: row[zipCol] || '',
     email: row[emailCol] || '',
     phone: row[phoneCol] || '',
-    status: row[statusCol] || 'Active'
+    status: row[statusCol] || CUSTOMER_STATUSES.ACTIVE  // Use constant instead of string
   }));
 
   // Log summary for debugging
@@ -330,63 +378,136 @@ function getCustomerData() {
 }
 
 function createCustomerRecord(data) {
-  const sheet = getSheet(CONFIG.SHEETS.CUSTOMERS);
-  if (!sheet) throw new Error('Could not open Customers sheet');
+  try {
+    const sheet = getSheet(CONFIG.SHEETS.CUSTOMERS);
+    if (!sheet) throw new Error('Could not open Customers sheet');
 
-  const customerId = generateCustomerID();
-  const now = new Date();
-  const userEmail = Session.getActiveUser().getEmail();
-  const initialStatus = CUSTOMER_STATUSES.ACTIVE;
+    const customerId = generateCustomerID();
+    const now = new Date();
+    const userEmail = Session.getActiveUser().getEmail();
+    const initialStatus = CUSTOMER_STATUSES.ACTIVE;
 
-  // Format phone number before saving
-  const formattedPhone = formatPhoneNumber(data.phone);
+    // Format phone number before saving
+    const formattedPhone = formatPhoneNumber(data.phone);
 
-  sheet.appendRow([
-    customerId,
-    data.name || '',
-    data.address || '',
-    data.city || '',
-    data.state || '',
-    data.zip || '',
-    data.email || '',
-    formattedPhone,    // Use formatted phone number
-    now,
-    userEmail,
-    initialStatus
-  ]);
-
-  // Add activity logging
-  logSystemActivity(
-    'CUSTOMER_CREATED',
-    'CUSTOMER',
-    customerId,
-    {
-      name: data.name,
-      email: data.email,
-      address: data.address,
-      city: data.city,
-      state: data.state,
-      zip: data.zip,
-      phone: data.phone
-    }
-  );
-
-  return {
-    success: true,
-    data: {
+    // Add row to sheet
+    sheet.appendRow([
       customerId,
-      name: data.name,
-      address: data.address,
-      city: data.city,
-      state: data.state,
-      zip: data.zip,
-      email: data.email,
-      phone: data.phone,
-      createdOn: now,
-      createdBy: userEmail,
-      status: initialStatus
-    }
-  };
+      data.name || '',
+      data.address || '',
+      data.city || '',
+      data.state || '',
+      data.zip || '',
+      data.email || '',
+      formattedPhone,
+      now,
+      userEmail,
+      initialStatus
+    ]);
+
+    // Return standardized success response
+    return {
+      success: true,
+      data: {
+        customerId: customerId,
+        name: data.name,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        zip: data.zip,
+        email: data.email,
+        phone: formattedPhone,
+        createdOn: now,
+        createdBy: userEmail,
+        status: initialStatus
+      }
+    };
+
+  } catch (error) {
+    Logger.log('Error in createCustomerRecord:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to create customer record'
+    };
+  }
+}
+
+// Customer Data Fetching
+function getCustomers() {
+  const { headers, rows } = getSheetData(CONFIG.SHEETS.CUSTOMERS);
+  const customerIdCol = headers.indexOf("CustomerID");
+  const nameCol = headers.indexOf("CustomerName");
+  const addressCol = headers.indexOf("Address");
+  const cityCol = headers.indexOf("City");
+  const stateCol = headers.indexOf("State");
+  const zipCol = headers.indexOf("Zip");
+  const emailCol = headers.indexOf("ContactEmail");
+  const phoneCol = headers.indexOf("Phone");
+  const statusCol = headers.indexOf("Status");
+  
+  return rows.map(row => ({
+    customerId: row[customerIdCol],
+    name: row[nameCol],
+    address: row[addressCol],
+    city: row[cityCol],
+    state: row[stateCol],
+    zip: row[zipCol],
+    email: row[emailCol],
+    phone: row[phoneCol],
+    status: row[statusCol] || 'Active' // Default to Active if not set
+  }));
+}
+
+// Vendor Data Fetching
+function getVendors() {
+  const { headers, rows } = getSheetData(CONFIG.SHEETS.VENDORS);
+  const vendorIdCol = headers.indexOf("VendorID");
+  const vendorNameCol = headers.indexOf("VendorName");
+  const addressCol = headers.indexOf("Address");
+  const cityCol = headers.indexOf("City");
+  const stateCol = headers.indexOf("State");
+  const zipCol = headers.indexOf("Zip");
+  const emailCol = headers.indexOf("Email");
+  const phoneCol = headers.indexOf("Phone");
+  const statusCol = headers.indexOf("Status");
+
+  return rows.map(row => ({
+    vendorId: row[vendorIdCol],
+    vendorName: row[vendorNameCol],
+    address: row[addressCol],
+    city: row[cityCol],
+    state: row[stateCol],
+    zip: row[zipCol],
+    email: row[emailCol],
+    phone: row[phoneCol],
+    status: row[statusCol] || 'Active'
+  }));
+}
+
+// Subcontractor Data Fetching
+function getSubcontractors() {
+  const { headers, rows } = getSheetData(CONFIG.SHEETS.SUBCONTRACTORS);
+  const subIdCol = headers.indexOf("SubID");
+  const subNameCol = headers.indexOf("SubName");
+  const addressCol = headers.indexOf("Address");
+  const cityCol = headers.indexOf("City");
+  const stateCol = headers.indexOf("State");
+  const zipCol = headers.indexOf("Zip");
+  const emailCol = headers.indexOf("ContactEmail");
+  const phoneCol = headers.indexOf("Phone");
+  const statusCol = headers.indexOf("Status");
+
+  return rows.map(row => ({
+    subId: row[subIdCol],
+    subName: row[subNameCol],
+    address: row[addressCol],
+    city: row[cityCol],
+    state: row[stateCol],
+    zip: row[zipCol],
+    contactEmail: row[emailCol],
+    phone: row[phoneCol],
+    status: row[statusCol] || 'Active'
+  }));
 }
 
 // ==========================================
@@ -417,35 +538,52 @@ function createVendor(data) {
   const now = new Date();
   const userEmail = Session.getActiveUser().getEmail();
 
-  // Add the row to the sheet
-  sheet.appendRow([
-    vendorId,              // VendorID
-    data.vendorName || '', // VendorName
-    now,                   // CreatedOn
-    userEmail,            // CreatedBy
-    'Active',             // Status
-    'Vend'               // QbVendorType - Always 'Vend' for vendors
-  ]);
+  try {
+    // Add the row to the sheet with all fields
+    sheet.appendRow([
+      vendorId,              // VendorID
+      data.vendorName,       // VendorName
+      data.address || '',    // Address
+      data.city || '',      // City
+      data.state || '',     // State
+      data.zip || '',       // Zip
+      data.email || '',     // Email
+      data.phone || '',     // Phone
+      now,                  // CreatedOn
+      userEmail,           // CreatedBy
+      'ACTIVE',           // Status
+      'Vend'             // QbVendorType
+    ]);
 
-  // Verify the vendor was created
-  const verifyData = sheet.getDataRange().getValues();
-  const vendorRow = verifyData.find(row => row[0] === vendorId);
-  
-  if (!vendorRow) {
-    throw new Error('Vendor creation verification failed');
-  }
-
-  return {
-    success: true,
-    data: {
-      vendorId: vendorId,            // Ensure vendorId is included
-      vendorName: data.vendorName,
-      createdOn: now,
-      createdBy: userEmail,
-      status: 'Active',
-      qbVendorType: 'Vend'
+    // Verify the vendor was created
+    const verifyData = sheet.getDataRange().getValues();
+    const vendorRow = verifyData.find(row => row[0] === vendorId);
+    
+    if (!vendorRow) {
+      throw new Error('Vendor creation verification failed');
     }
-  };
+
+    return {
+      success: true,
+      data: {
+        vendorId: vendorId,
+        vendorName: data.vendorName,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        zip: data.zip,
+        email: data.email,
+        phone: data.phone,
+        createdOn: now,
+        createdBy: userEmail,
+        status: 'ACTIVE',
+        qbVendorType: 'Vend'
+      }
+    };
+  } catch (error) {
+    Logger.log('Error in createVendor:', error.message);
+    throw error;
+  }
 }
 
 // ==========================================
@@ -458,7 +596,6 @@ function logActivity(data) {
 
   const logId = `LOG-${new Date().getTime()}`;
   const timestamp = new Date();
-
   sheet.appendRow([
     logId,
     timestamp,
@@ -481,20 +618,19 @@ function logActivity(data) {
 function generateCustomerID() {
   const sheet = getSheet(CONFIG.SHEETS.CUSTOMERS);
   const data = sheet.getDataRange().getValues();
-  const currentYear = CONFIG.CURRENT_CUSTOMER_YEAR;
-
+  const currentYear = new Date().getFullYear().toString().slice(-2); // Get last 2 digits
   Logger.log(`Generating Customer ID for year: ${currentYear}`);
 
   if (data.length <= 1) {
     Logger.log("No existing customers found, starting fresh.");
-    return `${currentYear}-001`;  // First customer of the year
+    return `${currentYear}-001`;  // First customer of the year (YY-XXX)
   }
 
-  // Extract only valid customer IDs that match the format YYYY-XXX
+  // Extract only valid customer IDs that match the new format YY-XXX
   const customerIds = data
     .slice(1)  // Ignore header row
     .map(row => row[0])  // Get only the customer ID column
-    .filter(id => id && /^\d{4}-\d{3}$/.test(id));  // Match format YYYY-XXX
+    .filter(id => id && /^\d{2}-\d{3}$/.test(id));  // Match format YY-XXX
 
   Logger.log(`Found existing customer IDs: ${customerIds}`);
 
@@ -517,15 +653,16 @@ function generateCustomerID() {
 
   const newCustomerId = `${currentYear}-${nextSequence}`;
   Logger.log(`Generated new Customer ID: ${newCustomerId}`);
-
   return newCustomerId;
 }
-
 
 function generateProjectID() {
   const sheet = getSheet(CONFIG.SHEETS.PROJECTS);
   const data = sheet.getDataRange().getValues();
-  const yearMonth = Utilities.formatDate(new Date(), 'GMT', 'yyyyMM');
+  const date = new Date();
+  const yearLastTwo = date.getFullYear().toString().slice(-2);
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const yearMonth = `${yearLastTwo}${month}`;  // Changed from yyyyMM to yyMM
 
   if (data.length <= 1) return `PROJ-${yearMonth}-001`;
 
@@ -553,29 +690,28 @@ function getNextSubId(sheet) {
     // No properly formatted IDs exist yet, start with 001
     return "Sub-001";
   }
-  
+
   // Find the highest number used
   const maxNum = Math.max(...subIds.map(id => {
     const match = id.match(/^Sub-(\d{3})$/);
     return match ? parseInt(match[1], 10) : 0;
   }));
   
-  // Generate next number
+  // Generate next number.
   return `Sub-${(maxNum + 1).toString().padStart(3, '0')}`;
 }
 
 function generateEstimateID(projectID) {
   const sheet = getSheet(CONFIG.SHEETS.ESTIMATES);
   const data = sheet.getDataRange().getValues();
-
-  // Start from row 1 (exclude header).
+  // Start from row 1 (exclude header). 
   // Column 0 might be EstimateID, Column 1 is ProjectID, etc.
   const projectEstimates = data.slice(1)
     .filter(row => row[1] === projectID)
     .map(row => row[0]); // the EstimateID
 
   if (projectEstimates.length === 0) {
-    return `EST-${projectID}-1`;
+    return `EST-${projectID}-1`;  // Uses project ID formats project 
   }
 
   const lastSequence = Math.max(...projectEstimates.map(id => {
@@ -601,14 +737,14 @@ function generateVendorID() {
     // No properly formatted IDs exist yet, start with 001
     return "VEND-001";
   }
-  
+
   // Find the highest number used
   const maxNum = Math.max(...vendIds.map(id => {
     const match = id.match(/^VEND-(\d{3})$/);
     return match ? parseInt(match[1], 10) : 0;
   }));
   
-  // Generate next number
+  // Generate next number.
   return `VEND-${(maxNum + 1).toString().padStart(3, '0')}`;
 }
 
@@ -639,7 +775,7 @@ function updateEstimateStatus(estimateId, newStatus, userEmail) {
   // Log activity
   logActivity({
     action: 'ESTIMATE_STATUS_CHANGED',
-    moduleType: 'ESTIMATE',
+    moduleType: 'ESTIMATE', 
     referenceId: estimateId,
     userEmail: userEmail,
     details: {
@@ -669,7 +805,6 @@ function updateProjectStatus(projectId, newStatus, userEmail) {
     if (rowIndex === -1) {
       throw new Error(`Project ${projectId} not found`);
     }
-    
     const oldStatus = data[rowIndex][statusCol];
     
     // Validate status transition
@@ -680,7 +815,7 @@ function updateProjectStatus(projectId, newStatus, userEmail) {
       Logger.log(`Old status: ${oldStatus}, New status: ${newStatus}`);
       throw error;
     }
-    
+
     // Update status in spreadsheet
     sheet.getRange(rowIndex + 1, statusCol + 1).setValue(newStatus);
     
@@ -717,7 +852,12 @@ function updateProjectStatus(projectId, newStatus, userEmail) {
 
 function logEstimate(data) {
   Logger.log('=== logEstimate called ===');
-  Logger.log('Data received: ' + JSON.stringify(data));
+  Logger.log('Data received:' + JSON.stringify(data));
+  Logger.log('Amount values:', {
+    amount: data.amount,
+    totalAmount: data.totalAmount,
+    estimateAmount: data.estimateAmount
+  });
 
   const sheet = getSheet(CONFIG.SHEETS.ESTIMATES);
   if (!sheet) {
@@ -742,7 +882,7 @@ function logEstimate(data) {
   // Check if ContingencyAmount column exists
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const hasContingencyColumn = headers.includes('ContingencyAmount');
-  
+
   // If column doesn't exist, add it
   if (!hasContingencyColumn) {
     sheet.getRange(1, headers.length + 1).setValue('ContingencyAmount');
@@ -754,7 +894,7 @@ function logEstimate(data) {
     data.projectId || '',           // B: ProjectID
     now,                            // C: DateCreated
     data.customerId || '',          // D: CustomerID
-    parseFloat(data.amount) || 0,   // E: EstimateAmount (main amount)
+    parseFloat(data.estimateAmount) || parseFloat(data.totalAmount) || parseFloat(data.amount) || 0,   // E: EstimateAmount
     parseFloat(data.contingencyAmount) || 0,  // F: ContingencyAmount
     userEmail,                      // G: CreatedBy
     '',                             // H: DocUrl placeholder
@@ -772,8 +912,16 @@ function logEstimate(data) {
   ];
 
   Logger.log('Appending row data to ESTIMATES sheet:', rowData);
-
   sheet.appendRow(rowData);
+
+  // After logging the estimate, update the project details
+  updateProjectDetails(data.projectId, {
+    jobDescription: data.jobDescription || '',
+    siteLocationAddress: data.siteLocationAddress || '',
+    siteLocationCity: data.siteLocationCity || '',
+    siteLocationState: data.siteLocationState || '',
+    siteLocationZip: data.siteLocationZip || ''
+  });
 
   Logger.log('Successfully appended row. Returning logEstimate result.');
   return {
@@ -781,6 +929,46 @@ function logEstimate(data) {
     createdOn: now,
     status: initialStatus
   };
+}
+
+// Add this new function to handle project updates
+function updateProjectDetails(projectId, data) {
+  const sheet = getSheet(CONFIG.SHEETS.PROJECTS);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  
+  const projectIdCol = headers.indexOf('ProjectID');
+  const jobDescriptionCol = headers.indexOf('JobDescription');
+  const siteAddressCol = headers.indexOf('SiteLocationAddress');
+  const siteCityCol = headers.indexOf('SiteLocationCity');
+  const siteStateCol = headers.indexOf('SiteLocationState');
+  const siteZipCol = headers.indexOf('SiteLocationZip');
+  
+  const rowIndex = values.findIndex(row => row[projectIdCol] === projectId);
+  
+  if (rowIndex === -1) {
+    Logger.log(`Project ${projectId} not found`);
+    return;
+  }
+
+  // Update each field if it exists in the sheet
+  if (jobDescriptionCol !== -1) {
+    sheet.getRange(rowIndex + 1, jobDescriptionCol + 1).setValue(data.jobDescription);
+  }
+  if (siteAddressCol !== -1) {
+    sheet.getRange(rowIndex + 1, siteAddressCol + 1).setValue(data.siteLocationAddress);
+  }
+  if (siteCityCol !== -1) {
+    sheet.getRange(rowIndex + 1, siteCityCol + 1).setValue(data.siteLocationCity);
+  }
+  if (siteStateCol !== -1) {
+    sheet.getRange(rowIndex + 1, siteStateCol + 1).setValue(data.siteLocationState);
+  }
+  if (siteZipCol !== -1) {
+    sheet.getRange(rowIndex + 1, siteZipCol + 1).setValue(data.siteLocationZip);
+  }
+
+  Logger.log(`Updated project ${projectId} with site location and job description details`);
 }
 
 function updateEstimateDocUrl(estimateId, docUrl, docId) {
@@ -807,7 +995,7 @@ function updateEstimateDocUrl(estimateId, docUrl, docId) {
 function updateMaterialsReceiptDocUrl(receiptId, docUrl, docId) {
   const sheet = getSheet(CONFIG.SHEETS.MATERIALS_RECEIPTS);
   if (!sheet) throw new Error("Materials Receipts sheet not found");
-  
+
   const data = sheet.getDataRange().getValues();
   // Column 0 is the receiptId
   // Column 5 is existing doc URL (1-based => column 6)
@@ -849,7 +1037,6 @@ function updateSubInvoiceDocUrl(invoiceId, docUrl, docId) {
 
 function getCustomers() {
   const { headers, rows } = getSheetData(CONFIG.SHEETS.CUSTOMERS);
-  
   const customerIdCol = headers.indexOf("CustomerID");
   const nameCol = headers.indexOf("CustomerName");
   const addressCol = headers.indexOf("Address");
@@ -882,7 +1069,7 @@ function getCustomerProjects(customerId) {
   const statusCol = headers.indexOf("Status");
   const createdOnCol = headers.indexOf("CreatedOn");
   const jobIdCol = headers.indexOf("JobID");
-  
+
   return rows
     .filter(row => row[customerIdCol] === customerId)
     .map(row => ({
@@ -896,7 +1083,6 @@ function getCustomerProjects(customerId) {
 
 function getCustomerEstimates(customerId) {
   const { headers, rows } = getSheetData(CONFIG.SHEETS.ESTIMATES);
-  
   const estimateIdCol = headers.indexOf("EstimateID");
   const projectIdCol = headers.indexOf("ProjectID");
   const customerIdCol = headers.indexOf("CustomerID");
@@ -906,7 +1092,7 @@ function getCustomerEstimates(customerId) {
   const versionCol = headers.indexOf("VersionNumber");
   const isActiveCol = headers.indexOf("IsActive");
   const approvedAmountCol = headers.indexOf("CurrentApprovedAmount");
-  
+
   return rows
     .filter(row => row[customerIdCol] === customerId)
     .map(row => ({

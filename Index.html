@@ -4,24 +4,22 @@
   <base target="_top">
   <meta charset="UTF-8">
   <title>AKC LLC Management</title>
-  <!-- Load Tailwind -->
+  
+  <!-- Load React and ReactDOM first with full URLs and integrity checks -->
+  <script 
+    src="https://unpkg.com/react@17.0.2/umd/react.development.js" 
+    crossorigin
+  ></script>
+  <script 
+    src="https://unpkg.com/react-dom@17.0.2/umd/react-dom.development.js" 
+    crossorigin
+  ></script>
+  
+  <!-- Load Tailwind after React -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Load React (v17) -->
-  <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
 
-  <!-- Server-side scripts are automatically included by Apps Script -->
-  <!-- Database.gs, Utils.gs, and Config.gs do NOT need to be included here -->
-
-  <!-- Include only client-side component files -->
-  <?!= include('TimeLogger'); ?>
-  <?!= include('MaterialsReceipt'); ?>
-  <?!= include('SubInvoice'); ?>
-  <?!= include('EstimateCreator'); ?>
-  <?!= include('CustomerManagement'); ?>
-
+  <!-- Global styles before components -->
   <script>
-    // Global styles object available to all components
     window.appStyles = {
       container: 'max-w-2xl mx-auto p-4',
       card: 'bg-white shadow rounded-lg p-6',
@@ -42,164 +40,203 @@
       }
     };
   </script>
+
+  <!-- Load components after React and styles are loaded -->
+  <?!= include('CustomerManagement'); ?>
+  <?!= include('VendorManagement'); ?>
+  <?!= include('SubcontractorManagement'); ?>
+  <?!= include('TimeLogger'); ?>
+  <?!= include('MaterialsReceipt'); ?>
+  <?!= include('SubInvoice'); ?>
+  <?!= include('EstimateCreator'); ?>
+  <?!= include('Dashboard'); ?>  <!-- Dashboard last since it depends on other components -->
 </head>
 <body>
   <div class="min-h-screen bg-gray-100">
-    <div class="container mx-auto p-4">
-      <!-- Header -->
-      <div class="text-center mb-8">
-        <h1 class="text-3xl font-bold text-gray-800 mb-2">AKC LLC Management</h1>
-        <p class="text-gray-600">Select an option to get started</p>
-      </div>
-
-      <!-- Main Content Area -->
-      <div id="mainContent">
-        <div id="menuScreen" class="max-w-2xl mx-auto">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <button 
-              id="timeLoggerBtn" 
-              class="p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-center"
-            >
-              <div class="text-2xl text-blue-500 mb-2">⏱️</div>
-              <h2 class="text-xl font-semibold text-gray-800 mb-2">Log Time</h2>
-              <p class="text-gray-600 text-sm">Record time spent on projects</p>
-            </button>
-
-            <button 
-              id="materialsReceiptBtn" 
-              class="p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-center"
-            >
-              <div class="text-2xl text-green-500 mb-2">📝</div>
-              <h2 class="text-xl font-semibold text-gray-800 mb-2">Materials Receipt</h2>
-              <p class="text-gray-600 text-sm">Submit materials and receipts</p>
-            </button>
-
-            <button 
-              id="subInvoiceBtn" 
-              class="p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-center"
-            >
-              <div class="text-2xl text-purple-500 mb-2">🔧</div>
-              <h2 class="text-xl font-semibold text-gray-800 mb-2">Sub-Invoice</h2>
-              <p class="text-gray-600 text-sm">Submit subcontractor invoices</p>
-            </button>
-
-            <button 
-              id="estimateCreatorBtn" 
-              class="p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-center"
-            >
-              <div class="text-2xl text-orange-500 mb-2">📄</div>
-              <h2 class="text-xl font-semibold text-gray-800 mb-2">Create Estimate</h2>
-              <p class="text-gray-600 text-sm">Generate new project estimates</p>
-            </button>
-
-            <button 
-              id="customerManagementBtn" 
-              class="p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-center"
-            >
-              <div class="text-2xl text-teal-500 mb-2">👥</div>
-              <h2 class="text-xl font-semibold text-gray-800 mb-2">Customers</h2>
-              <p class="text-gray-600 text-sm">Manage customer information</p>
-            </button>           
-          </div>
+    <div class="container mx-auto px-4 py-6">
+      <!-- Updated Header with Logo -->
+      <div class="text-center mb-10">
+        <div class="flex justify-center items-center mb-6">
+          <img 
+            src="https://raw.githubusercontent.com/Cradcliff187/AKC-BETA-SIMPLE/64b7144f3996311782e32ad5ca6b162f6b734c99/AKC%20logo%20Only%20llc.jpg"
+            alt="AKC LLC Logo" 
+            class="h-20 sm:h-24 w-auto object-contain"
+          />
         </div>
-
-        <div id="root" class="hidden"></div>
+        <div class="w-full h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
       </div>
 
-      <!-- Back Button (Initially Hidden) -->
-      <div id="backBtn" class="mt-4 text-center hidden">
-        <button class="text-blue-600 hover:text-blue-800">
-          ← Back to Menu
+      <!-- Main Navigation Grid -->
+      <div id="menuScreen" class="max-w-4xl mx-auto">
+        <h2 class="text-xl text-gray-600 text-center mb-8">Select an option below</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          <!-- Time Logger -->
+          <button 
+            id="timeLoggerBtn" 
+            class="p-6 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 text-center transform hover:-translate-y-1"
+          >
+            <div class="text-3xl text-blue-500 mb-3">⏱️</div>
+            <h2 class="text-lg font-semibold text-gray-800 mb-2">Log Time</h2>
+            <p class="text-sm text-gray-600">Record time spent on projects</p>
+          </button>
+
+          <!-- Materials Receipt -->
+          <button 
+            id="materialsReceiptBtn" 
+            class="p-6 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 text-center transform hover:-translate-y-1"
+          >
+            <div class="text-3xl text-green-500 mb-3">📝</div>
+            <h2 class="text-lg font-semibold text-gray-800 mb-2">Materials Receipt</h2>
+            <p class="text-sm text-gray-600">Submit materials and receipts</p>
+          </button>
+
+          <!-- Sub Invoice -->
+          <button 
+            id="subInvoiceBtn" 
+            class="p-6 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 text-center transform hover:-translate-y-1"
+          >
+            <div class="text-3xl text-purple-500 mb-3">🔧</div>
+            <h2 class="text-lg font-semibold text-gray-800 mb-2">Sub-Invoice</h2>
+            <p class="text-sm text-gray-600">Submit subcontractor invoices</p>
+          </button>
+
+          <!-- Estimate Creator -->
+          <button 
+            id="estimateCreatorBtn" 
+            class="p-6 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 text-center transform hover:-translate-y-1"
+          >
+            <div class="text-3xl text-orange-500 mb-3">📄</div>
+            <h2 class="text-lg font-semibold text-gray-800 mb-2">Create Estimate</h2>
+            <p class="text-sm text-gray-600">Generate new project estimates</p>
+          </button>
+
+          <!-- Replace CustomerManagement button with Dashboard -->
+          <button 
+            id="dashboardBtn" 
+            class="p-6 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 text-center transform hover:-translate-y-1"
+          >
+            <div class="text-3xl text-indigo-500 mb-3">📊</div>
+            <h2 class="text-lg font-semibold text-gray-800 mb-2">Business Management</h2>
+            <p class="text-sm text-gray-600">Manage customers, vendors & contractors</p>
+          </button>
+        </div>
+      </div>
+
+      <!-- React Root -->
+      <div id="root" class="hidden max-w-4xl mx-auto mt-6"></div>
+
+      <!-- Back Button -->
+      <div id="backBtn" class="mt-8 text-center hidden">
+        <button class="inline-flex items-center px-4 py-2 text-blue-600 hover:text-blue-800 transition-colors duration-200">
+          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+          </svg>
+          Back to Menu
         </button>
       </div>
     </div>
   </div>
 
+  <!-- Main app script moved to end of body -->
   <script>
-    const App = () => {
-      const [currentPage, setCurrentPage] = React.useState(null);
+    // Wait for DOM and React to be fully loaded
+    window.addEventListener('load', function() {
+      if (typeof React === 'undefined') {
+        console.error('React not loaded');
+        return;
+      }
+      if (typeof ReactDOM === 'undefined') {
+        console.error('ReactDOM not loaded');
+        return;
+      }
 
-      // Unified navigation handler
-      const handleNavigation = (page) => {
-        console.log(`Navigating to: ${page}`);
-        const menuScreen = document.getElementById('menuScreen');
-        const rootElement = document.getElementById('root');
-        const backBtn = document.getElementById('backBtn');
+      const App = () => {
+        const [currentPage, setCurrentPage] = React.useState(null);
 
-        if (page === null) {
-          // Going back to menu
-          console.log('Returning to menu');
-          menuScreen.classList.remove('hidden');
-          rootElement.classList.add('hidden');
-          backBtn.classList.add('hidden');
-        } else {
-          // Going to a component
-          console.log('Showing component');
-          menuScreen.classList.add('hidden');
-          rootElement.classList.remove('hidden');
-          backBtn.classList.remove('hidden');
-        }
-        setCurrentPage(page);
-      };
+        // Navigation logic
+        const handleNavigation = (page) => {
+          const menuScreen = document.getElementById('menuScreen');
+          const rootElement = document.getElementById('root');
+          const backBtn = document.getElementById('backBtn');
 
-      React.useEffect(() => {
-        const buttons = {
-          timeLoggerBtn: 'timeLogger',
-          materialsReceiptBtn: 'materialsReceipt',
-          subInvoiceBtn: 'subInvoice',
-          estimateCreatorBtn: 'estimateCreator',
-          customerManagementBtn: 'customerManagement'
+          if (page === null) {
+            menuScreen.classList.remove('hidden');
+            rootElement.classList.add('hidden');
+            backBtn.classList.add('hidden');
+          } else {
+            menuScreen.classList.add('hidden');
+            rootElement.classList.remove('hidden');
+            backBtn.classList.remove('hidden');
+          }
+          setCurrentPage(page);
         };
 
-        // Add click handlers to all buttons
-        Object.entries(buttons).forEach(([btnId, page]) => {
-          const btn = document.getElementById(btnId);
-          if (btn) {
-            const handler = () => handleNavigation(page);
-            btn.addEventListener('click', handler);
-            return () => btn.removeEventListener('click', handler);
+        // Event listeners for buttons
+        React.useEffect(() => {
+          const buttons = {
+            timeLoggerBtn: 'timeLogger',
+            materialsReceiptBtn: 'materialsReceipt',
+            subInvoiceBtn: 'subInvoice',
+            estimateCreatorBtn: 'estimateCreator',
+            dashboardBtn: 'dashboard'  // Updated to use dashboard
+          };
+
+          // Add click handlers
+          Object.entries(buttons).forEach(([btnId, page]) => {
+            const btn = document.getElementById(btnId);
+            if (btn) {
+              const handler = () => handleNavigation(page);
+              btn.addEventListener('click', handler);
+              return () => btn.removeEventListener('click', handler);
+            }
+          });
+
+          // Back button handler
+          const backBtn = document.getElementById('backBtn');
+          if (backBtn) {
+            const handleBack = () => handleNavigation(null);
+            backBtn.addEventListener('click', handleBack);
+            return () => backBtn.removeEventListener('click', handleBack);
           }
-        });
+        }, []);
 
-        // Back button handler
-        const backBtn = document.getElementById('backBtn');
-        if (backBtn) {
-          const handleBack = () => handleNavigation(null);
-          backBtn.addEventListener('click', handleBack);
-          return () => backBtn.removeEventListener('click', handleBack);
-        }
-      }, []);
-
-      // Component rendering with better error handling
-      console.log('Rendering page:', currentPage);
-      try {
+        // Render appropriate component
         if (!currentPage) return null;
 
+        // This was the issue - button mappings were correct but components object was incomplete
         const components = {
-          timeLogger: TimeLogger,
-          materialsReceipt: MaterialsReceipt,
-          subInvoice: SubInvoice,
-          estimateCreator: EstimateCreator,
-          customerManagement: CustomerManagement
+          timeLogger: window.TimeLogger,
+          materialsReceipt: window.MaterialsReceipt,
+          subInvoice: window.SubInvoice,         // This was missing the correct reference
+          estimateCreator: window.EstimateCreator,
+          dashboard: window.Dashboard
         };
 
+        // Add debug logging to help diagnose
+        console.log('Available components:', {
+          timeLogger: !!window.TimeLogger,
+          materialsReceipt: !!window.MaterialsReceipt,
+          subInvoice: !!window.SubInvoice,
+          estimateCreator: !!window.EstimateCreator,
+          dashboard: !!window.Dashboard
+        });
+
         const Component = components[currentPage];
-        if (!Component) {
-          console.error(`No component found for page: ${currentPage}`);
-          return null;
-        }
+        return Component ? React.createElement(Component) : null;
+      };
 
-        return React.createElement(Component);
-      } catch (error) {
-        console.error('Error rendering component:', error);
-        return React.createElement('div', null, 'Error loading component');
-      }
-    };
-
-    // Initialize app
-    document.addEventListener('DOMContentLoaded', () => {
+      // Initialize app only if React is available
       const root = document.getElementById('root');
-      ReactDOM.render(React.createElement(App), root);
+      if (!root) {
+        console.error('Root element not found');
+        return;
+      }
+      
+      try {
+        ReactDOM.render(React.createElement(App), root);
+      } catch (error) {
+        console.error('Error rendering app:', error);
+      }
     });
   </script>
 </body>

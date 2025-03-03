@@ -1,5 +1,5 @@
 /**************************************
- * Code.gs - Main Application Logic
+ * Code.js - Main Application Logic
  **************************************/
 
 // ==========================================
@@ -11,6 +11,7 @@ function doGet() {
     .evaluate()
     .setTitle('AKC LLC Management')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setSandboxMode(HtmlService.SandboxMode.IFRAME)
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
@@ -25,10 +26,51 @@ function include(filename) {
 function getProjects() {
   const context = 'getProjects';
   try {
+    Logger.log('=== Starting getProjects ===');
+    
+    // Get projects from database with null check
     const projects = getActiveProjects();
-    return createStandardResponse(true, projects);
+    if (!projects) {
+      Logger.log('getActiveProjects returned null');
+      return createStandardResponse(false, null, 'No projects data available');
+    }
+
+    Logger.log(`Raw projects count: ${projects.length}`);
+    
+    // Basic validation
+    if (!Array.isArray(projects)) {
+      Logger.log('Projects is not an array');
+      return createStandardResponse(false, null, 'Invalid projects data format');
+    }
+
+    // Log allowed statuses for debugging
+    Logger.log(`Allowed statuses: ${JSON.stringify(MODULE_ACCESS_STATUSES)}`);
+    
+    // Validate each project has required fields
+    const validProjects = projects.filter(p => {
+      const isValid = p && 
+                     p.id && 
+                     p.name && 
+                     typeof p.customerName !== 'undefined';
+      if (!isValid) {
+        Logger.log(`Invalid project found: ${JSON.stringify(p)}`);
+      }
+      return isValid;
+    });
+
+    Logger.log(`Valid projects count: ${validProjects.length}`);
+    
+    // Always return a valid response object
+    return createStandardResponse(
+      true, 
+      validProjects, 
+      validProjects.length === 0 ? 'No active projects found' : null
+    );
+
   } catch (error) {
-    return handleError(error, context);
+    Logger.log(`Error in ${context}: ${error.message}`);
+    Logger.log(`Stack: ${error.stack}`);
+    return createStandardResponse(false, null, `Failed to get projects: ${error.message}`);
   }
 }
 
@@ -46,11 +88,7 @@ function getActiveProjects() {
   const subInvoicesFolderCol = headers.indexOf("SubInvoicesFolderID");
   const docUrlCol = headers.indexOf("DocUrl");  // Add this line
 
-  if ([
-    projectIdCol, projectNameCol, statusCol, folderIdCol,
-    estimatesFolderCol, materialsFolderCol, subInvoicesFolderCol,
-    jobIdCol
-  ].includes(-1)) {
+  if ([projectIdCol, projectNameCol, statusCol, folderIdCol, estimatesFolderCol, materialsFolderCol, subInvoicesFolderCol, jobIdCol].includes(-1)) {
     throw new Error("Required columns not found in Projects sheet");
   }
 
@@ -72,7 +110,7 @@ function getActiveProjects() {
 
 function setWorkspacePermissions(folders) {
   const DOMAIN = 'austinkunzconstruction.com';
-  
+
   // Helper function to set permissions on a single folder
   const setFolderPermission = (folderId) => {
     try {
@@ -88,7 +126,7 @@ function setWorkspacePermissions(folders) {
         'role': 'writer',
         'domain': DOMAIN
       };
-      
+
       const createResponse = Drive.Permissions.create(
         permissionResource,
         folderId,
@@ -108,21 +146,21 @@ function setWorkspacePermissions(folders) {
 
   // Get all folder IDs to process
   const folderIds = new Set();
-  
+
   // Add main folder
   if (folders.main) {
     folderIds.add(folders.main);
   } else if (folders.folderId) {
     folderIds.add(folders.folderId);
   }
-  
+
   // Add subfolders
   if (folders.estimates) folderIds.add(folders.estimates);
   if (folders.materials) folderIds.add(folders.materials);
   if (folders.subInvoices) folderIds.add(folders.subInvoices);
   
   Logger.log('Processing permissions for folders: ' + Array.from(folderIds).join(', '));
-  
+
   // Set permissions for each folder
   let allSuccessful = true;
   for (const folderId of folderIds) {
@@ -179,9 +217,11 @@ function createProject(data) {
       }
     );
 
-    // 6) Return the newly created project
-    return createStandardResponse(true, result.data);
-
+    // 6) Return the newly created project (ensure folders is in data)
+    return createStandardResponse(true, {
+      ...result.data,
+      folders: result.data.folders  // Ensure folders is included
+    });
   } catch (error) {
     Logger.log(`Error in ${context}: ${error.message}`);
     Logger.log(`Stack: ${error.stack}`);
@@ -209,7 +249,7 @@ function submitTimeLog(data) {
     const startTime = new Date(`${data.date} ${data.startTime}`);
     const endTime = new Date(`${data.date} ${data.endTime}`);
     const hours = (endTime - startTime) / (1000 * 60 * 60);
-    
+
     if (hours <= 0) {
       return createStandardResponse(false, null, "End time must be after start time");
     }
@@ -304,7 +344,6 @@ function submitMaterialsReceipt(data) {
       amount: formatCurrency(amount),
       timestamp: formatDate(new Date(), 'iso')
     });
-
   } catch (error) {
     return handleError(error, context);
   }
@@ -326,23 +365,26 @@ function createVendorForClient(data) {
     Logger.log('=== Starting createVendorForClient ===');
     Logger.log('Input data: ' + JSON.stringify(data));
 
-    // Validate input
+    // Validate input - expanded for all fields
     if (!data || !data.vendorName) {
       Logger.log('Error: Missing vendorName in input');
       return createStandardResponse(false, null, 'Vendor name is required');
     }
 
-    // Validate required fields
-    const requiredFields = ['vendorName'];
-    const validation = validateRequiredFields(data, requiredFields);
-    if (!validation.valid) {
-      Logger.log('Validation failed: ' + validation.error);
-      return createStandardResponse(false, null, validation.error);
-    }
+    // Clean and format data
+    const cleanedData = {
+      vendorName: data.vendorName.trim(),
+      address: (data.address || '').trim(),
+      city: (data.city || '').trim(),
+      state: (data.state || '').trim(),
+      zip: (data.zip || '').trim(),
+      email: (data.email || '').trim(),
+      phone: (data.phone || '').trim()
+    };
 
     // Create vendor
-    Logger.log('Creating vendor with name: ' + data.vendorName);
-    const result = createVendor(data);
+    Logger.log('Creating vendor with data: ' + JSON.stringify(cleanedData));
+    const result = createVendor(cleanedData);
     Logger.log('Create vendor result: ' + JSON.stringify(result));
 
     if (!result || !result.success) {
@@ -355,18 +397,28 @@ function createVendorForClient(data) {
       'VENDOR_CREATED',
       'VENDOR',
       result.data.vendorId,
-      {
-        vendorName: data.vendorName
-      }
+      cleanedData
     );
 
     Logger.log('Vendor created successfully: ' + JSON.stringify(result.data));
-    return createStandardResponse(true, result.data);
+    
+    // Return standardized response with all vendor data
+    return createStandardResponse(true, {
+      vendorId: result.data.vendorId,
+      vendorName: cleanedData.vendorName,
+      address: cleanedData.address,
+      city: cleanedData.city,
+      state: cleanedData.state,
+      zip: cleanedData.zip,
+      email: cleanedData.email,
+      phone: cleanedData.phone,
+      status: 'ACTIVE'
+    });
 
   } catch (error) {
     Logger.log('Error in createVendorForClient: ' + error.message);
     Logger.log('Stack: ' + error.stack);
-    return handleError(error, context);
+    return createStandardResponse(false, null, error.message);
   }
 }
 
@@ -438,6 +490,34 @@ function submitSubInvoice(data) {
   }
 }
 
+function createSubcontractor(data) {
+  const context = 'createSubcontractor';
+  try {
+    Logger.log('Creating subcontractor with data:', data);
+    const result = Database.createSubcontractor(data);
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to create subcontractor');
+    }
+
+    // Log activity
+    logSystemActivity(
+      'SUBCONTRACTOR_CREATED',
+      'SUBCONTRACTOR',
+      result.data.subId,
+      {
+        ...result.data,
+        createdBy: Session.getActiveUser().getEmail()
+      }
+    );
+
+    return createStandardResponse(true, result.data);
+  } catch (error) {
+    Logger.log(`Error in ${context}: ${error.message}`);
+    return createStandardResponse(false, null, error.message);
+  }
+}
+
 // ==========================================
 // CUSTOMER MANAGEMENT
 // ==========================================
@@ -506,7 +586,6 @@ function getCustomersForClient() {
 
     Logger.log(`Returning ${customers.length} valid customers`);
     return createStandardResponse(true, customers);
-
   } catch (error) {
     Logger.log('ERROR in getCustomersForClient:', error.message);
     Logger.log('Stack:', error.stack);
@@ -528,11 +607,46 @@ function createStandardResponse(success, data = null, error = null) {
 function createCustomer(data) {
   const context = 'createCustomer';
   try {
-    const result = createCustomerRecord(data);
-    // Use standardized response format
+    // Validate required fields
+    if (!data || !data.name) {
+      return createStandardResponse(false, null, 'Customer name is required');
+    }
+
+    // Clean data
+    const cleanedData = {
+      name: data.name.trim(),
+      address: (data.address || '').trim(),
+      city: (data.city || '').trim(),
+      state: (data.state || '').trim(),
+      zip: (data.zip || '').trim(),
+      email: (data.email || '').trim(),
+      phone: (data.phone || '').trim()
+    };
+
+    Logger.log('Creating customer with data:', cleanedData);
+
+    // Create customer record
+    const result = createCustomerRecord(cleanedData);
+    
+    if (!result || !result.success) {
+      Logger.log('Customer creation failed:', result);
+      return createStandardResponse(false, null, 'Failed to create customer record');
+    }
+
+    // Log activity
+    logSystemActivity(
+      'CUSTOMER_CREATED',
+      'CUSTOMER',
+      result.data.customerId,
+      cleanedData
+    );
+
+    Logger.log('Customer created successfully:', result.data);
     return createStandardResponse(true, result.data);
+
   } catch (error) {
-    return handleError(error, context);
+    Logger.log(`Error in ${context}:`, error);
+    return createStandardResponse(false, null, error.message || 'Failed to create customer');
   }
 }
 
@@ -695,7 +809,7 @@ function uploadReceiptFile(base64Data, folderId, fileType = 'MATREC') {
 
 function extractFolderIdFromUrl(folderUrl) {
   const urlPatterns = [
-    /\/folders\/([a-zA-Z0-9-_]+)/, 
+    /\/folders\/([a-zA-Z0-9-_]+)/,
     /\/drive\/folders\/([a-zA-Z0-9-_]+)/, 
     /id=([a-zA-Z0-9-_]+)/
   ];
@@ -726,7 +840,7 @@ function generateEstimateDocument(data) {
     const newDocFile = templateDoc.makeCopy(baseName, projectFolder);
     const doc = DocumentApp.openById(newDocFile.getId());
     const body = doc.getBody();
-
+    // **IMPORTANT**: Use the folder ID passed in (e.g. the Estimates subfolder ID)
     // Replace standard placeholders
     const replacements = {
       '{{EstimateNumber}}': finalEstimateId,
@@ -754,13 +868,11 @@ function generateEstimateDocument(data) {
       const headerText = table.getCell(0, 0).getText().trim();
       if (headerText === 'ITEM/SERVICE') {
         Logger.log("Found service items table");
-
         const safeParse = (str) => parseFloat(String(str).replace(/[^0-9.]/g, '')) || 0;
 
         for (let i = 0; i < data.tableItems.length && i < (table.getNumRows() - 1); i++) {
           const rowIndex = i + 1;
           const item = data.tableItems[i];
-
           const numericRate = safeParse(item.rate);
           const numericAmount = safeParse(item.amount);
 
@@ -786,7 +898,6 @@ function generateEstimateDocument(data) {
     // Save & create PDF
     doc.saveAndClose();
     Utilities.sleep(1500); // ensure changes propagate
-
     const docFile = DriveApp.getFileById(newDocFile.getId());
     const pdfBlob = docFile.getAs('application/pdf');
     pdfBlob.setName(`${baseName}.pdf`);
@@ -802,77 +913,34 @@ function generateEstimateDocument(data) {
     };
 
   } catch (error) {
-    Logger.log("Error in generateEstimateDocument: " + error.message);
-    return { success: false, error: error.message };
-  }
-}
-
-// ==========================================
-// CREATE & SAVE ESTIMATE
-// ==========================================
-
-function createAndSaveEstimate(data) {
-  const context = 'createAndSaveEstimate';
-  try {
-    Logger.log(`=== ${context} called ===`);
-    Logger.log(`Data received: ${JSON.stringify(data)}`);
-
-    // 1) Log the estimate to the DB (Database.gs)
-    Logger.log('Logging estimate...');
-    const logResult = logEstimate({
-      ...data,
-      estimateAmount: data.totalAmount, // renamed from estimatedAmount
-      contingencyAmount: data.contingencyAmount, // ensure contingency is included
-      siteLocationAddress: data.siteLocationAddress,
-      siteLocationCity: data.siteLocationCity,
-      siteLocationState: data.siteLocationState,
-      siteLocationZip: data.siteLocationZip
-    });
-    Logger.log(`logResult: ${JSON.stringify(logResult)}`);
-
-    const finalEstimateId = logResult.estimateId;
-
-    // 2) Generate the document
-    Logger.log('Generating estimate document...');
-    const docResult = generateEstimateDocument({
-      ...data,
-      estimateId: finalEstimateId,
-      projectFolderId: data.projectFolderId || (data.folders && data.folders.estimates)
-    });
-    Logger.log(`docResult: ${JSON.stringify(docResult)}`);
-
-    if (!docResult.success) {
-      throw new Error(docResult.error || 'Failed to generate estimate document');
-    }
-
-    // 3) Update doc URL & ID
-    Logger.log(`Updating estimate doc URL for ID: ${finalEstimateId}`);
-    const docUrl = docResult.data.docUrl;
-    const docId = docResult.data.docId;
-    updateEstimateDocUrl(finalEstimateId, docUrl, docId);
-    Logger.log(`Estimate doc URL/ID updated successfully: ${docUrl} / ${docId}`);
-
-    // Return success
-    return {
-      success: true,
-      data: {
-        estimateId: finalEstimateId,
-        docUrl: docUrl,
-        docId: docId
-      }
-    };
-
-  } catch (error) {
-    // Enhanced error logging
-    Logger.log(`Error in ${context}: ${error.message}`);
+    Logger.log(`Error in generateEstimateDocument: ${error.message}`);
     Logger.log(`Stack: ${error.stack}`);
     return { success: false, error: error.message };
   }
 }
 
+// Add new helper function to update project site location
+function updateProjectSiteLocation(projectId, siteLocation) {
+  const sheet = getSheet(CONFIG.SHEETS.PROJECTS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const projectIdCol = headers.indexOf('ProjectID');
+  const siteAddressCol = headers.indexOf('SiteLocationAddress');
+  const siteCityCol = headers.indexOf('SiteLocationCity');
+  const siteStateCol = headers.indexOf('SiteLocationState');
+  const siteZipCol = headers.indexOf('SiteLocationZip');
 
+  const rowIndex = data.findIndex(row => row[projectIdCol] === projectId);
+  if (rowIndex === -1) return;
+  
+  sheet.getRange(rowIndex + 1, siteAddressCol + 1).setValue(siteLocation.address);
+  sheet.getRange(rowIndex + 1, siteCityCol + 1).setValue(siteLocation.city);
+  sheet.getRange(rowIndex + 1, siteStateCol + 1).setValue(siteLocation.state);
+  sheet.getRange(rowIndex + 1, siteZipCol + 1).setValue(siteLocation.zip);
+}
+  
 // ==========================================
-// UTILITY
+// UTILITY FUNCTIONS
 // ==========================================
 
 function formatCurrency(amount) {
@@ -893,27 +961,23 @@ function testGetTemplate() {
 // ==========================================
 
 // Add to Code.gs - New client-facing functions
-
 function updateEstimateStatusForClient(data) {
   const context = 'updateEstimateStatusForClient';
   try {
-    // Validate required fields
-    const requiredFields = ['estimateId', 'newStatus'];
-    const validation = validateRequiredFields(data, requiredFields);
-    if (!validation.valid) {
-      return createStandardResponse(false, null, validation.error);
-    }
-
-    const userEmail = Session.getActiveUser().getEmail();
+    const { estimateId, newStatus } = data;
     
-    // Call database function
-    const result = updateEstimateStatus(
-      data.estimateId,
-      data.newStatus,
-      userEmail
-    );
-
-    return createStandardResponse(true, result.data);
+    // First update estimate status
+    const result = updateEstimateStatus(estimateId, newStatus, Session.getActiveUser().getEmail());
+    
+    // If estimate is being approved, also update the associated project
+    if (newStatus === ESTIMATE_STATUSES.APPROVED) {
+      const estimate = getEstimateById(estimateId);
+      if (estimate && estimate.projectId) {
+        updateProjectStatus(estimate.projectId, PROJECT_STATUSES.APPROVED, Session.getActiveUser().getEmail());
+      }
+    }
+    
+    return createStandardResponse(true, result);
   } catch (error) {
     return handleError(error, context);
   }
@@ -958,7 +1022,7 @@ function loadPreviousEstimateVersion(data) {
     const sheet = getSheet(CONFIG.SHEETS.ESTIMATES);
     const estimates = sheet.getDataRange().getValues();
     const headers = estimates[0];
-    
+
     const estimateRow = estimates.find(row => 
       row[headers.indexOf('EstimateID')] === data.previousEstimateId
     );
@@ -990,7 +1054,6 @@ function getModuleVisibility(projectId) {
     const sheet = getSheet(CONFIG.SHEETS.PROJECTS);
     const data = sheet.getDataRange().getValues();
     const headers = data[0];
-    
     const projectIdCol = headers.indexOf('ProjectID');
     const statusCol = headers.indexOf('Status');
     
@@ -1000,10 +1063,9 @@ function getModuleVisibility(projectId) {
     }
 
     const status = projectRow[statusCol];
-    
     // Only show modules if project is APPROVED or IN_PROGRESS
     const modulesEnabled = ['APPROVED', 'IN_PROGRESS'].includes(status);
-    
+
     return createStandardResponse(true, {
       timeLogging: modulesEnabled,
       materialsReceipts: modulesEnabled,
@@ -1027,7 +1089,7 @@ function getCustomerDetailsForClient(customerId) {
     if (!customer) {
       return createStandardResponse(false, null, 'Customer not found');
     }
-    
+
     const enrichedCustomer = enrichCustomerData(customer);
     return createStandardResponse(true, enrichedCustomer);
   } catch (error) {
@@ -1041,28 +1103,25 @@ function updateCustomerStatus(data) {
     const sheet = getSheet(CONFIG.SHEETS.CUSTOMERS);
     const values = sheet.getDataRange().getValues();
     const headers = values[0];
-    
     const customerIdCol = headers.indexOf("CustomerID");
     let statusCol = headers.indexOf("Status");
-    
+    const rowIndex = values.findIndex(row => row[customerIdCol] === data.customerId);
     // If Status column not found by name, use last column
     if (statusCol === -1) {
       statusCol = headers.length - 1;
     }
-    
+
     Logger.log(`CustomerID column: ${customerIdCol}`);
     Logger.log(`Status column: ${statusCol}`);
-    
-    const rowIndex = values.findIndex(row => row[customerIdCol] === data.customerId);
+
     if (rowIndex === -1) {
       throw new Error('Customer not found');
     }
-    
+
     // Update status with proper range validation
     if (rowIndex >= 0 && statusCol >= 0) {
       sheet.getRange(rowIndex + 1, statusCol + 1).setValue(data.newStatus);
       return createStandardResponse(true, {
-        customerId: data.customerId,
         status: data.newStatus
       });
     } else {
@@ -1080,4 +1139,185 @@ function getEstimateSheetHeaders() {
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   Logger.log("Estimate Sheet Headers: " + headers.join(", "));
   return createStandardResponse(true, headers);
+}
+
+function createAndSaveEstimate(data) {
+  const context = 'createAndSaveEstimate';
+  try {
+    Logger.log(`=== ${context} called ===`);
+    Logger.log(`Data received: ${JSON.stringify(data)}`);
+
+    // 1) Log the estimate to the DB
+    Logger.log('Logging estimate...');
+    const logResult = logEstimate({
+      ...data,
+      totalAmount: parseFloat(data.amount) || 0, // Fix: pass amount as totalAmount
+      contingencyAmount: parseFloat(data.contingencyAmount) || 0,
+      // Use the correct site location data based on selection
+      siteLocationAddress: data.usePrimaryAddress ? data.customerAddress : data.siteLocationAddress,
+      siteLocationCity: data.usePrimaryAddress ? data.customerCity : data.siteLocationCity,
+      siteLocationState: data.usePrimaryAddress ? data.customerState : data.siteLocationState,
+      siteLocationZip: data.usePrimaryAddress ? data.customerZip : data.siteLocationZip
+    });
+
+    const finalEstimateId = logResult.estimateId;
+
+    // 2) Generate the document
+    Logger.log('Generating estimate document...');
+    const docResult = generateEstimateDocument({
+      ...data,
+      estimateId: finalEstimateId,
+      projectFolderId: data.projectFolderId || (data.folders && data.folders.estimates)
+    });
+
+    if (!docResult.success) {
+      throw new Error(docResult.error || 'Failed to generate estimate document');
+    }
+
+    // 3) Update doc URL & ID in database
+    Logger.log(`Updating estimate doc URL for ID: ${finalEstimateId}`);
+    const docUrl = docResult.data.docUrl;
+    const docId = docResult.data.docId;
+    updateEstimateDocUrl(finalEstimateId, docUrl, docId);
+
+    // 4) Update project's site location if different from customer address
+    if (!data.usePrimaryAddress) {
+      updateProjectSiteLocation(data.projectId, {
+        address: data.siteLocationAddress,
+        city: data.siteLocationCity,
+        state: data.siteLocationState,
+        zip: data.siteLocationZip
+      });
+    }
+
+    return {
+      success: true,
+      data: {
+        estimateId: finalEstimateId,
+        docUrl: docUrl,
+        docId: docId
+      }
+    };
+  } catch (error) {
+    Logger.log(`Error in ${context}: ${error.message}`);
+    Logger.log(`Stack: ${error.stack}`);
+    return { success: false, error: error.message };
+  }
+}
+
+function getDashboardAnalytics() {
+  try {
+    const projects = getActiveProjects();
+    const estimates = getEstimates();
+    
+    return createStandardResponse(true, {
+      projects: {
+        active: projects.filter(p => p.status === PROJECT_STATUSES.IN_PROGRESS).length,
+        approved: projects.filter(p => p.status === PROJECT_STATUSES.APPROVED).length,
+        total: projects.length
+      },
+      estimates: {
+        pending: estimates.filter(e => e.status === ESTIMATE_STATUSES.PENDING).length,
+        total: estimates.length
+      }
+    });
+  } catch (error) {
+    Logger.log('Error in getDashboardAnalytics:', error);
+    return handleError(error, 'getDashboardAnalytics');
+  }
+}
+
+// Fix getEstimates to include all necessary fields
+function getEstimates() {
+  const { headers, rows } = getSheetData(CONFIG.SHEETS.ESTIMATES);
+  
+  const estimateIdCol = headers.indexOf('EstimateID');
+  const statusCol = headers.indexOf('Status');
+  const projectIdCol = headers.indexOf('ProjectID');
+  const customerNameCol = headers.indexOf('CustomerName');
+  const amountCol = headers.indexOf('EstimateAmount');
+  const dateCreatedCol = headers.indexOf('DateCreated');
+  
+  return rows.map(row => ({
+    id: row[estimateIdCol], // For consistent id field
+    estimateId: row[estimateIdCol], // Keep both for compatibility
+    projectId: row[projectIdCol],
+    status: row[statusCol],
+    customerName: row[customerNameCol] || '',
+    amount: row[amountCol] || 0,
+    dateCreated: row[dateCreatedCol] ? new Date(row[dateCreatedCol]) : new Date()
+  }));
+}
+
+// Fix getProjectsByStatus
+function getProjectsByStatus(status) {
+  const context = 'getProjectsByStatus';
+  try {
+    Logger.log(`Getting projects with status: ${status}`);
+    
+    // Get all projects
+    const { headers, rows } = getSheetData(CONFIG.SHEETS.PROJECTS);
+    
+    const projectIdCol = headers.indexOf('ProjectID');
+    const nameCol = headers.indexOf('ProjectName');
+    const statusCol = headers.indexOf('Status');
+    const customerNameCol = headers.indexOf('CustomerName');
+
+    // Filter and map in one pass
+    const filteredProjects = rows
+      .filter(row => row[statusCol] === status)
+      .map(row => ({
+        id: row[projectIdCol],
+        projectId: row[projectIdCol],
+        name: row[nameCol],
+        status: row[statusCol],
+        customerName: row[customerNameCol] || ''
+      }));
+
+    Logger.log(`Found ${filteredProjects.length} projects with status ${status}`);
+    
+    return createStandardResponse(true, filteredProjects);
+  } catch (error) {
+    Logger.log(`Error in ${context}: ${error.message}`);
+    Logger.log(`Stack: ${error.stack}`);
+    return createStandardResponse(false, [], error.message);
+  }
+}
+
+function getEstimatesByStatus(status) {
+  const context = 'getEstimatesByStatus';
+  try {
+    Logger.log(`Getting estimates with status: ${status}`);
+    
+    // Get all estimates using the same getSheetData helper function
+    const { headers, rows } = getSheetData(CONFIG.SHEETS.ESTIMATES);
+    
+    // Match the same simple column structure as projects
+    const estimateIdCol = headers.indexOf('EstimateID');
+    const projectIdCol = headers.indexOf('ProjectID');
+    const statusCol = headers.indexOf('Status');
+    const customerNameCol = headers.indexOf('CustomerName');
+    const amountCol = headers.indexOf('EstimateAmount');
+
+    // Filter and map in one pass, just like projects
+    const filteredEstimates = rows
+      .filter(row => row[statusCol] === status)
+      .map(row => ({
+        id: row[estimateIdCol],
+        estimateId: row[estimateIdCol],
+        projectId: row[projectIdCol] || '',
+        name: `Estimate ${row[estimateIdCol]}`,  // Added for consistency with project display
+        status: row[statusCol],
+        customerName: row[customerNameCol] || '',
+        amount: row[amountCol] || 0
+      }));
+
+    Logger.log(`Found ${filteredEstimates.length} estimates with status ${status}`);
+    
+    return createStandardResponse(true, filteredEstimates);
+  } catch (error) {
+    Logger.log(`Error in ${context}: ${error.message}`);
+    Logger.log(`Stack: ${error.stack}`);
+    return createStandardResponse(false, [], error.message);
+  }
 }

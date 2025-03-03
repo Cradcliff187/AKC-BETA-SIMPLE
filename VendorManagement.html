@@ -1,136 +1,5 @@
 <script>
 (function() {
-  // === CreateCustomerForm Component ===
-  const CreateCustomerForm = ({ onSubmit, onCancel }) => {
-    const [formData, setFormData] = React.useState({
-      name: '',
-      email: '',
-      phone: '',
-      address: '',
-      city: '',
-      state: '',
-      zip: ''
-    });
-
-    const handleSubmit = (e) => {
-      e.preventDefault();
-      if (!formData.name.trim()) return;
-      onSubmit(formData);
-    };
-
-    // Phone number formatter
-    const formatPhoneNumber = (value) => {
-      const cleaned = value.replace(/\D/g, '');
-      if (cleaned.length >= 10) {
-        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6,10)}`;
-      } else if (cleaned.length > 6) {
-        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
-      } else if (cleaned.length > 3) {
-        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3)}`;
-      } else if (cleaned.length > 0) {
-        return `(${cleaned}`;
-      }
-      return cleaned;
-    };
-
-    return React.createElement('div', { className: 'space-y-4 bg-white p-6 rounded-lg shadow' },
-      React.createElement('h3', { className: 'text-lg font-semibold' }, 'Create New Customer'),
-      React.createElement('form', { onSubmit: handleSubmit, className: 'space-y-4' },
-        // Name field
-        React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Customer Name *'),
-          React.createElement('input', {
-            type: 'text',
-            required: true,
-            value: formData.name,
-            onChange: e => setFormData(prev => ({ ...prev, name: e.target.value })),
-            className: 'w-full p-2 border rounded'
-          })
-        ),
-        // Contact Info
-        React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Email'),
-            React.createElement('input', {
-              type: 'email',
-              value: formData.email,
-              onChange: e => setFormData(prev => ({ ...prev, email: e.target.value })),
-              className: 'w-full p-2 border rounded'
-            })
-          ),
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Phone'),
-            React.createElement('input', {
-              type: 'tel',
-              value: formData.phone,
-              onChange: e => setFormData(prev => ({ 
-                ...prev, 
-                phone: formatPhoneNumber(e.target.value)
-              })),
-              className: 'w-full p-2 border rounded'
-            })
-          )
-        ),
-        // Address fields
-        React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Address'),
-          React.createElement('input', {
-            type: 'text',
-            value: formData.address,
-            onChange: e => setFormData(prev => ({ ...prev, address: e.target.value })),
-            className: 'w-full p-2 border rounded'
-          })
-        ),
-        React.createElement('div', { className: 'grid grid-cols-3 gap-4' },
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'City'),
-            React.createElement('input', {
-              type: 'text',
-              value: formData.city,
-              onChange: e => setFormData(prev => ({ ...prev, city: e.target.value })),
-              className: 'w-full p-2 border rounded'
-            })
-          ),
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'State'),
-            React.createElement('input', {
-              type: 'text',
-              maxLength: 2,
-              value: formData.state,
-              onChange: e => setFormData(prev => ({ ...prev, state: e.target.value.toUpperCase() })),
-              className: 'w-full p-2 border rounded'
-            })
-          ),
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'ZIP'),
-            React.createElement('input', {
-              type: 'text',
-              maxLength: 5,
-              value: formData.zip,
-              onChange: e => setFormData(prev => ({ 
-                ...prev, 
-                zip: e.target.value.replace(/\D/g, '').slice(0, 5)
-              })),
-              className: 'w-full p-2 border rounded'
-            })
-          )
-        ),
-        // Buttons
-        React.createElement('div', { className: 'flex justify-end space-x-4 pt-4' },
-          React.createElement('button', {
-            type: 'button',
-            onClick: onCancel,
-            className: 'px-4 py-2 border rounded hover:bg-gray-50'
-          }, 'Cancel'),
-          React.createElement('button', {
-            type: 'submit',
-            className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700'
-          }, 'Create Customer')
-        )
-      )
-    );
-  };
-
   // === Standardized Loading Overlay ===
   const StandardLoadingOverlay = ({ message = 'Loading...' }) => {
     return React.createElement('div', {
@@ -191,7 +60,7 @@
         React.createElement('tbody', { className: 'bg-white divide-y divide-gray-200' },
           data.map(item => 
             React.createElement('tr', { 
-              key: item.customerId,
+              key: item.vendorId,
               onClick: () => onRowClick(item),
               className: 'hover:bg-gray-50 cursor-pointer'
             },
@@ -210,23 +79,155 @@
     );
   };
 
-  // === Main CustomerManagement Component ===
-  const CustomerManagement = ({ showMessage, loading: parentLoading, setLoading: setParentLoading }) => {
+  // === Create Vendor Form Component ===
+  const CreateVendorForm = ({ onSubmit, onCancel }) => {
+    const [formData, setFormData] = React.useState({
+      vendorName: '',
+      address: '',
+      city: '',
+      state: '',
+      zip: '',
+      email: '',
+      phone: ''
+    });
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      if (!formData.vendorName.trim()) return;
+      onSubmit(formData);
+    };
+
+    // Phone number formatter
+    const formatPhoneNumber = (value) => {
+      const cleaned = value.replace(/\D/g, '');
+      if (cleaned.length >= 10) {
+        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6,10)}`;
+      } else if (cleaned.length > 6) {
+        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
+      } else if (cleaned.length > 3) {
+        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3)}`;
+      } else if (cleaned.length > 0) {
+        return `(${cleaned}`;
+      }
+      return cleaned;
+    };
+
+    return React.createElement('div', { className: 'space-y-4 bg-white p-6 rounded-lg shadow' },
+      React.createElement('h3', { className: 'text-lg font-semibold' }, 'Create New Vendor'),
+      React.createElement('form', { onSubmit: handleSubmit, className: 'space-y-4' },
+        // Vendor Name (required)
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Vendor Name *'),
+          React.createElement('input', {
+            type: 'text',
+            required: true,
+            value: formData.vendorName,
+            onChange: e => setFormData(prev => ({ ...prev, vendorName: e.target.value })),
+            className: 'w-full p-2 border rounded'
+          })
+        ),
+        // Address
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Address'),
+          React.createElement('input', {
+            type: 'text',
+            value: formData.address,
+            onChange: e => setFormData(prev => ({ ...prev, address: e.target.value })),
+            className: 'w-full p-2 border rounded'
+          })
+        ),
+        // City, State, Zip
+        React.createElement('div', { className: 'grid grid-cols-3 gap-4' },
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'City'),
+            React.createElement('input', {
+              type: 'text',
+              value: formData.city,
+              onChange: e => setFormData(prev => ({ ...prev, city: e.target.value })),
+              className: 'w-full p-2 border rounded'
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'State'),
+            React.createElement('input', {
+              type: 'text',
+              maxLength: 2,
+              value: formData.state,
+              onChange: e => setFormData(prev => ({ ...prev, state: e.target.value.toUpperCase() })),
+              className: 'w-full p-2 border rounded'
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'ZIP'),
+            React.createElement('input', {
+              type: 'text',
+              maxLength: 5,
+              value: formData.zip,
+              onChange: e => setFormData(prev => ({ 
+                ...prev, 
+                zip: e.target.value.replace(/\D/g, '').slice(0, 5)
+              })),
+              className: 'w-full p-2 border rounded'
+            })
+          )
+        ),
+        // Contact Info
+        React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Phone'),
+            React.createElement('input', {
+              type: 'tel',
+              value: formData.phone,
+              onChange: e => setFormData(prev => ({ 
+                ...prev, 
+                phone: formatPhoneNumber(e.target.value)
+              })),
+              className: 'w-full p-2 border rounded'
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Email'),
+            React.createElement('input', {
+              type: 'email',
+              value: formData.email,
+              onChange: e => setFormData(prev => ({ ...prev, email: e.target.value })),
+              className: 'w-full p-2 border rounded'
+            })
+          )
+        ),
+        // Buttons
+        React.createElement('div', { className: 'flex justify-end space-x-4 pt-4' },
+          React.createElement('button', {
+            type: 'button',
+            onClick: onCancel,
+            className: 'px-4 py-2 border rounded hover:bg-gray-50'
+          }, 'Cancel'),
+          React.createElement('button', {
+            type: 'submit',
+            className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700'
+          }, 'Create Vendor')
+        )
+      )
+    );
+  };
+
+  // === Main VendorManagement Component ===
+  const VendorManagement = ({ showMessage, loading: parentLoading, setLoading: setParentLoading }) => {
     // Remove local loading state, use parent's exclusively
     const setLoading = setParentLoading;
     const mountedRef = React.useRef(true);
 
-    // State for customers and filtering
-    const [customers, setCustomers] = React.useState([]);
-    const [filteredCustomers, setFilteredCustomers] = React.useState([]);
-    const [selectedCustomer, setSelectedCustomer] = React.useState(null);
+    // State management
+    const [vendors, setVendors] = React.useState([]);
+    const [filteredVendors, setFilteredVendors] = React.useState([]);
+    const [selectedVendor, setSelectedVendor] = React.useState(null);
     const [viewMode, setViewMode] = React.useState('list');
     const [isCreating, setIsCreating] = React.useState(false);
     const [searchTerm, setSearchTerm] = React.useState('');
     const [statusFilter, setStatusFilter] = React.useState('All');
 
     // === Data Fetching with Better Error Handling ===
-    const fetchCustomers = React.useCallback(() => {
+    const fetchVendors = React.useCallback(() => {
       if (!mountedRef.current) return;
       setLoading(true);
 
@@ -235,11 +236,11 @@
           .withSuccessHandler(response => {
             if (!mountedRef.current) return;
             if (response && response.success) {
-              setCustomers(response.data || []);
-              setFilteredCustomers(response.data || []);
+              setVendors(response.data || []);
+              setFilteredVendors(response.data || []);
               resolve(response.data);
             } else {
-              const error = response?.error || 'Failed to load customers';
+              const error = response?.error || 'Failed to load vendors';
               showMessage(error, 'error');
               reject(new Error(error));
             }
@@ -247,12 +248,12 @@
           })
           .withFailureHandler(error => {
             if (!mountedRef.current) return;
-            console.error('Error fetching customers:', error);
-            showMessage('Failed to load customers', 'error');
+            console.error('Error fetching vendors:', error);
+            showMessage('Failed to load vendors', 'error');
             setLoading(false);
             reject(error);
           })
-          .getCustomersForClient();
+          .getVendorsForClient();
       });
     }, [setLoading, showMessage]);
 
@@ -265,39 +266,39 @@
 
     // Initial fetch with error boundary
     React.useEffect(() => {
-      fetchCustomers().catch(error => {
-        console.error('Error in initial customer fetch:', error);
+      fetchVendors().catch(error => {
+        console.error('Error in initial vendor fetch:', error);
       });
-    }, [fetchCustomers]);
+    }, [fetchVendors]);
 
     // === Search and Filter Effect ===
     React.useEffect(() => {
-      let filtered = [...customers];
+      let filtered = [...vendors];
       
       if (searchTerm.trim()) {
         const searchLower = searchTerm.toLowerCase();
-        filtered = filtered.filter(customer => 
-          customer.name.toLowerCase().includes(searchLower) ||
-          customer.customerId.toLowerCase().includes(searchLower) ||
-          customer.email?.toLowerCase().includes(searchLower) ||
-          customer.phone?.includes(searchTerm)
+        filtered = filtered.filter(vendor => 
+          vendor.vendorName.toLowerCase().includes(searchLower) ||
+          vendor.vendorId.toLowerCase().includes(searchLower) ||
+          vendor.email?.toLowerCase().includes(searchLower) ||
+          vendor.phone?.includes(searchTerm)
         );
       }
 
       if (statusFilter !== 'All') {
-        filtered = filtered.filter(customer => customer.status === statusFilter);
+        filtered = filtered.filter(vendor => vendor.status === statusFilter);
       }
 
-      setFilteredCustomers(filtered);
-    }, [searchTerm, statusFilter, customers]);
+      setFilteredVendors(filtered);
+    }, [searchTerm, statusFilter, vendors]);
 
     // === Handlers ===
-    const handleCreateCustomer = async (formData) => {
+    const handleCreateVendor = async (formData) => {
       setLoading(true);
       
       try {
         const cleanedData = {
-          name: formData.name.trim(),
+          vendorName: formData.vendorName.trim(),
           address: formData.address.trim(),
           city: formData.city.trim(),
           state: formData.state.trim(),
@@ -310,26 +311,26 @@
           google.script.run
             .withSuccessHandler(result => {
               if (result === null) {
-                // Handle null response by fetching latest customers
+                // Handle null response by fetching latest vendors
                 google.script.run
-                  .withSuccessHandler(customersResult => {
-                    if (customersResult && customersResult.success) {
-                      // Find our newly created customer
-                      const foundCustomer = customersResult.data.find(c => 
-                        c.name === cleanedData.name &&
-                        c.address === cleanedData.address
+                  .withSuccessHandler(vendorsResult => {
+                    if (vendorsResult && vendorsResult.success) {
+                      // Find our newly created vendor
+                      const foundVendor = vendorsResult.data.find(v => 
+                        v.vendorName === cleanedData.vendorName &&
+                        v.address === cleanedData.address
                       );
-                      if (foundCustomer) {
-                        resolve({ success: true, data: foundCustomer });
+                      if (foundVendor) {
+                        resolve({ success: true, data: foundVendor });
                       } else {
-                        reject(new Error('Could not verify customer creation'));
+                        reject(new Error('Could not verify vendor creation'));
                       }
                     } else {
-                      reject(new Error('Failed to verify customer creation'));
+                      reject(new Error('Failed to verify vendor creation'));
                     }
                   })
                   .withFailureHandler(error => reject(error))
-                  .getCustomersForClient();
+                  .getVendorsForClient();
               } else if (result && result.success) {
                 resolve(result);
               } else {
@@ -338,21 +339,21 @@
             })
             .withFailureHandler(error => {
               console.error('Server error:', error);
-              reject(new Error(error.message || 'Failed to create customer'));
+              reject(new Error(error.message || 'Failed to create vendor'));
             })
-            .createCustomer(cleanedData);
+            .createVendorForClient(cleanedData);
         });
 
         if (response.success) {
-          showMessage('Customer created successfully', 'success');
+          showMessage('Vendor created successfully', 'success');
           setIsCreating(false);
-          fetchCustomers(); // Refresh list
+          fetchVendors(); // Refresh list
         } else {
-          throw new Error(response.error || 'Failed to create customer');
+          throw new Error(response.error || 'Failed to create vendor');
         }
       } catch (error) {
-        console.error('Error creating customer:', error);
-        showMessage(error.message || 'Error creating customer', 'error');
+        console.error('Error creating vendor:', error);
+        showMessage(error.message || 'Error creating vendor', 'error');
       } finally {
         setLoading(false);
       }
@@ -373,6 +374,41 @@
       return cleaned;
     };
 
+    // === Export Functionality ===
+    const exportVendorData = () => {
+      const exportData = filteredVendors.map(vendor => ({
+        'Vendor ID': vendor.vendorId,
+        'Name': vendor.vendorName,
+        'Email': vendor.email,
+        'Phone': vendor.phone,
+        'Total Transactions': vendor.metrics?.totalTransactions || 0,
+        'Total Spend': vendor.metrics?.totalSpend || 0,
+        'Status': vendor.status || 'N/A'
+      }));// Convert to CSV
+      const headers = Object.keys(exportData[0]);
+      const csvContent = [
+        headers.join(','),
+        ...exportData.map(row => 
+          headers.map(header => 
+            JSON.stringify(row[header] || '')
+          ).join(',')
+        )
+      ].join('\n');
+
+      // Create download link
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `vendor_data_${new Date().toISOString()}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    };
+
     // === Render Methods ===
     const renderHeader = () => {
       return React.createElement('div', { 
@@ -380,11 +416,11 @@
       },
         React.createElement('h2', { 
           className: 'text-xl sm:text-2xl font-bold text-gray-900' 
-        }, 'Customer Management'),
+        }, 'Vendor Management'),
         React.createElement('button', {
           onClick: () => setIsCreating(true),
           className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700'
-        }, 'Add New Customer')
+        }, 'Add New Vendor')
       );
     };
 
@@ -394,7 +430,7 @@
         React.createElement('div', { className: 'flex flex-col sm:flex-row gap-4' },
           React.createElement('input', {
             type: 'text',
-            placeholder: 'Search customers...',
+            placeholder: 'Search vendors...',
             value: searchTerm,
             onChange: e => setSearchTerm(e.target.value),
             className: 'p-2 border rounded w-full sm:w-64'
@@ -412,9 +448,9 @@
       );
     };
 
-    // Render customer details view
-    const renderCustomerDetails = () => {
-      if (!selectedCustomer) return null;
+    // Render vendor details view
+    const renderVendorDetails = () => {
+      if (!selectedVendor) return null;
 
       return React.createElement('div', { className: 'space-y-6' },
         // Header with back button
@@ -422,11 +458,11 @@
           className: 'flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6' 
         },
           React.createElement('h3', { className: 'text-xl font-bold' }, 
-            `${selectedCustomer.name} Details`
+            `${selectedVendor.vendorName} Details`
           ),
           React.createElement('button', {
             onClick: () => {
-              setSelectedCustomer(null);
+              setSelectedVendor(null);
               setViewMode('list');
             },
             className: 'inline-flex items-center text-blue-600 hover:text-blue-800'
@@ -442,62 +478,62 @@
           React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-4' },
             React.createElement('div', null,
               React.createElement('p', { className: 'text-sm text-gray-600' }, 'Email:'),
-              React.createElement('p', null, selectedCustomer.email || 'N/A')
+              React.createElement('p', null, selectedVendor.email || 'N/A')
             ),
             React.createElement('div', null,
               React.createElement('p', { className: 'text-sm text-gray-600' }, 'Phone:'),
-              React.createElement('p', null, selectedCustomer.phone || 'N/A')
+              React.createElement('p', null, selectedVendor.phone || 'N/A')
             ),
             React.createElement('div', null,
               React.createElement('p', { className: 'text-sm text-gray-600' }, 'Address:'),
               React.createElement('p', null, 
                 [
-                  selectedCustomer.address, 
-                  selectedCustomer.city, 
-                  selectedCustomer.state, 
-                  selectedCustomer.zip
+                  selectedVendor.address, 
+                  selectedVendor.city, 
+                  selectedVendor.state, 
+                  selectedVendor.zip
                 ].filter(Boolean).join(', ') || 'N/A'
               )
             ),
             React.createElement('div', null,
               React.createElement('p', { className: 'text-sm text-gray-600' }, 'Status:'),
-              React.createElement('p', null, selectedCustomer.status || 'Unknown')
+              React.createElement('p', null, selectedVendor.status || 'Unknown')
             )
           )
         ),
 
-        // Metrics Card
+        // Vendor Metrics Card
         React.createElement('div', { className: 'bg-white p-4 sm:p-6 rounded-lg shadow-sm' },
-          React.createElement('h4', { className: 'font-semibold mb-4' }, 'Customer Metrics'),
+          React.createElement('h4', { className: 'font-semibold mb-4' }, 'Vendor Metrics'),
           React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4' },
             React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Total Projects:'),
+              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Total Transactions:'),
               React.createElement('p', { className: 'text-lg font-semibold' }, 
-                selectedCustomer.metrics?.totalProjects || 0
+                selectedVendor.metrics?.totalTransactions || 0
               )
             ),
             React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Active Projects:'),
-              React.createElement('p', { className: 'text-lg font-semibold' }, 
-                selectedCustomer.metrics?.activeProjects || 0
-              )
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Total Revenue:'),
+              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Total Spend:'),
               React.createElement('p', { className: 'text-lg font-semibold' }, 
                 new Intl.NumberFormat('en-US', {
                   style: 'currency',
                   currency: 'USD'
-                }).format(selectedCustomer.metrics?.totalRevenue || 0)
+                }).format(selectedVendor.metrics?.totalSpend || 0)
               )
             ),
             React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Avg Project Value:'),
+              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Average Transaction:'),
               React.createElement('p', { className: 'text-lg font-semibold' }, 
                 new Intl.NumberFormat('en-US', {
                   style: 'currency',
                   currency: 'USD'
-                }).format(selectedCustomer.metrics?.averageProjectValue || 0)
+                }).format(selectedVendor.metrics?.averageTransactionValue || 0)
+              )
+            ),
+            React.createElement('div', null,
+              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Last Transaction:'),
+              React.createElement('p', { className: 'text-lg font-semibold' }, 
+                selectedVendor.metrics?.lastTransactionDate || 'N/A'
               )
             )
           )
@@ -505,85 +541,46 @@
       );
     };
 
-    // Export functionality
-    const exportCustomerData = () => {
-      const exportData = filteredCustomers.map(customer => ({
-        'Customer ID': customer.customerId,
-        'Name': customer.name,
-        'Email': customer.email,
-        'Phone': customer.phone,
-        'Total Projects': customer.metrics?.totalProjects || 0,
-        'Active Projects': customer.metrics?.activeProjects || 0,
-        'Total Revenue': customer.metrics?.totalRevenue || 0,
-        'Average Project Value': customer.metrics?.averageProjectValue || 0,
-        'Status': customer.status || 'N/A'
-      }));
-
-      // Convert to CSV
-      const headers = Object.keys(exportData[0]);
-      const csvContent = [
-        headers.join(','),
-        ...exportData.map(row => 
-          headers.map(header => 
-            JSON.stringify(row[header] || '')
-          ).join(',')
-        )
-      ].join('\n');
-
-      // Create download link
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', `customer_data_${new Date().toISOString()}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-    };
-
     // Render the main view
     return React.createElement('div', { className: 'relative' },
       isCreating
-        ? React.createElement(CreateCustomerForm, {
-            onSubmit: handleCreateCustomer,
+        ? React.createElement(CreateVendorForm, {
+            onSubmit: handleCreateVendor,
             onCancel: () => setIsCreating(false)
           })
         : React.createElement('div', { className: 'space-y-6' },
             renderHeader(),
             viewMode === 'details'
-              ? renderCustomerDetails()
+              ? renderVendorDetails()
               : React.createElement(React.Fragment, null,
                   renderControls(),
                   React.createElement('div', { className: 'flex justify-end mb-4' },
                     React.createElement('button', {
-                      onClick: exportCustomerData,
+                      onClick: exportVendorData,
                       className: 'px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700'
                     }, 'Export CSV')
                   ),
                   React.createElement(StandardTable, {
                     columns: [
-                      { key: 'customerId', label: 'ID' },
-                      { key: 'name', label: 'Name' },
+                      { key: 'vendorId', label: 'ID' },
+                      { key: 'vendorName', label: 'Name' },
                       { key: 'email', label: 'Email' },
                       { key: 'phone', label: 'Phone' },
                       { 
                         key: 'status', 
                         label: 'Status', 
-                        render: (customer) => React.createElement('span', {
+                        render: (vendor) => React.createElement('span', {
                           className: `px-2 py-1 rounded text-xs ${
-                            customer.status === 'Active' ? 'bg-green-100 text-green-800' :
-                            customer.status === 'Inactive' ? 'bg-red-100 text-red-800' :
+                            vendor.status === 'Active' ? 'bg-green-100 text-green-800' :
+                            vendor.status === 'Inactive' ? 'bg-red-100 text-red-800' :
                             'bg-gray-100 text-gray-800'
                           }`
-                        }, customer.status || 'Unknown')
+                        }, vendor.status || 'Unknown')
                       }
                     ],
-                    data: filteredCustomers,
-                    onRowClick: (customer) => {
-                      setSelectedCustomer(customer);
+                    data: filteredVendors,
+                    onRowClick: (vendor) => {
+                      setSelectedVendor(vendor);
                       setViewMode('details');
                     }
                   })
@@ -594,7 +591,7 @@
 
   // Export to global window object
   if (typeof window !== 'undefined') {
-    window.CustomerManagement = CustomerManagement;
+    window.VendorManagement = VendorManagement;
   }
 })();
 </script>

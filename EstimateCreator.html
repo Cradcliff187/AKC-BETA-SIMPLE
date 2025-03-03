@@ -372,6 +372,7 @@ const EstimateCreator = () => {
         jobDescription: projectData.jobDescription,
         poNumber: projectData.poNumber,
         estimateAmount: parseFloat(projectData.amount) || 0,
+        totalAmount: parseFloat(projectData.amount) || 0,
         contingencyAmount: parseFloat(projectData.contingencyAmount) || 0
       };
 
@@ -874,4 +875,77 @@ const EstimateCreator = () => {
 
 // Make available globally
 window.EstimateCreator = EstimateCreator;
+
+// Update createNewCustomer handler
+const createNewCustomer = async () => {
+  setLoading(true);
+  
+  try {
+    const cleanedData = {
+      name: newCustomerData.name.trim(),
+      address: newCustomerData.address.trim(),
+      city: newCustomerData.city.trim(),
+      state: newCustomerData.state.trim(),
+      zip: newCustomerData.zip.trim(),
+      email: newCustomerData.email.trim(),
+      phone: formatPhoneNumber(newCustomerData.phone)
+    };
+
+    console.log('Creating customer with data:', cleanedData);
+
+    const response = await new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(result => {
+          console.log('Server response:', result);
+          if (result && result.success) {
+            resolve(result);
+          } else {
+            reject(new Error(result?.error || 'Server returned unsuccessful response'));
+          }
+        })
+        .withFailureHandler(error => {
+          console.error('Server error:', error);
+          reject(new Error(error.message || 'Failed to create customer'));
+        })
+        .createCustomer(cleanedData);
+    });
+
+    if (response.success) {
+      showMessage('Customer created successfully', 'success');
+      setNewCustomerMode(false);
+      setNewCustomerData({
+        name: '',
+        address: '',
+        city: '',
+        state: '',
+        zip: '',
+        email: '',
+        phone: ''
+      });
+      
+      // Update customers list and select new customer
+      if (response.data) {
+        setCustomers(prev => [...prev, response.data]);
+        setSelectedCustomer(response.data);
+        
+        // Also update address fields if needed
+        setEstimateData(prev => ({
+          ...prev,
+          customerName: response.data.name,
+          customerAddress: response.data.address,
+          customerCity: response.data.city,
+          customerState: response.data.state,
+          customerZip: response.data.zip
+        }));
+      }
+    } else {
+      throw new Error(response.error || 'Failed to create customer');
+    }
+  } catch (error) {
+    console.error('Error creating customer:', error);
+    showMessage(error.message || 'Error creating customer', 'error');
+  } finally {
+    setLoading(false);
+  }
+};
 </script>

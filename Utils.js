@@ -165,3 +165,13 @@ function formatPhoneNumber(phone) {
   // Return original if not 10 digits
   return phone;
 }
+
+// Add to Utils.js
+function handleComponentError(error, context, showMessage) {
+  console.error(`Error in ${context}:`, error);
+  showMessage(error.message || `Error in ${context}`, 'error');
+  return {
+    success: false,
+    error: error.message || `Error in ${context}`
+  };
+}

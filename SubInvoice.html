@@ -1,555 +1,569 @@
 <script>
-const SubInvoice = () => {
-  const styles = window.appStyles || {};
-  
-  // ============ STATE ============
-  const [projects, setProjects] = React.useState([]);
-  const [selectedProject, setSelectedProject] = React.useState('');
-  const [selectedProjectName, setSelectedProjectName] = React.useState('');
-  const [selectedProjectFolderId, setSelectedProjectFolderId] = React.useState('');
+(function() {
+  const SubInvoice = () => {
+    const styles = window.appStyles || {};
+    
+    // ============ STATE ============
+    const [projects, setProjects] = React.useState([]);
+    const [selectedProject, setSelectedProject] = React.useState('');
+    const [selectedProjectName, setSelectedProjectName] = React.useState('');
+    const [selectedProjectFolderId, setSelectedProjectFolderId] = React.useState('');
 
-  const [subcontractors, setSubcontractors] = React.useState([]);
-  const [selectedSubId, setSelectedSubId] = React.useState('');
-  const [selectedSubName, setSelectedSubName] = React.useState('');
-  const [creatingNewSub, setCreatingNewSub] = React.useState(false);
+    const [subcontractors, setSubcontractors] = React.useState([]);
+    const [selectedSubId, setSelectedSubId] = React.useState('');
+    const [selectedSubName, setSelectedSubName] = React.useState('');
+    const [creatingNewSub, setCreatingNewSub] = React.useState(false);
 
-  // Fields for creating new sub
-  const [newSubName, setNewSubName] = React.useState('');
-  const [newSubAddress, setNewSubAddress] = React.useState('');
-  const [newSubCity, setNewSubCity] = React.useState('');
-  const [newSubState, setNewSubState] = React.useState('');
-  const [newSubZip, setNewSubZip] = React.useState('');
-  const [newSubContactEmail, setNewSubContactEmail] = React.useState('');
-  const [newSubPhone, setNewSubPhone] = React.useState('');
+    // Fields for creating new sub
+    const [newSubName, setNewSubName] = React.useState('');
+    const [newSubAddress, setNewSubAddress] = React.useState('');
+    const [newSubCity, setNewSubCity] = React.useState('');
+    const [newSubState, setNewSubState] = React.useState('');
+    const [newSubZip, setNewSubZip] = React.useState('');
+    const [newSubContactEmail, setNewSubContactEmail] = React.useState('');
+    const [newSubPhone, setNewSubPhone] = React.useState('');
 
-  const [invoiceAmount, setInvoiceAmount] = React.useState('');
-  const [displayAmount, setDisplayAmount] = React.useState('');
-  const [invoiceFile, setInvoiceFile] = React.useState(null);
+    const [invoiceAmount, setInvoiceAmount] = React.useState('');
+    const [displayAmount, setDisplayAmount] = React.useState('');
+    const [invoiceFile, setInvoiceFile] = React.useState(null);
 
-  const [message, setMessage] = React.useState({ text: '', type: '' });
-  const [loading, setLoading] = React.useState(false);
-  const fileInputRef = React.useRef(null);
-  const mountedRef = React.useRef(true);
+    const [message, setMessage] = React.useState({ text: '', type: '' });
+    const [loading, setLoading] = React.useState(false);
+    const fileInputRef = React.useRef(null);
+    const mountedRef = React.useRef(true);
 
-  // ============ MOUNT ============
-  React.useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
+    // ============ MOUNT ============
+    React.useEffect(() => {
+      mountedRef.current = true;
+      return () => { mountedRef.current = false; };
+    }, []);
 
-  // Fetch projects & subs on mount
-  React.useEffect(() => {
-    // getProjects
-    new Promise(resolve => {
-      google.script.run
-        .withSuccessHandler(resolve)
-        .withFailureHandler(err => resolve({ success: false, error: err.message }))
-        .getProjects();
-    }).then(response => {
+    // Fetch projects & subs on mount
+    React.useEffect(() => {
+      // getProjects
+      new Promise(resolve => {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(err => resolve({ success: false, error: err.message }))
+          .getProjects();
+      }).then(response => {
+        if (!mountedRef.current) return;
+        if (response.success) {
+          setProjects(response.data);
+        } else {
+          showMessage(response.error || 'Failed to load projects', 'error');
+        }
+      });
+
+      // getSubcontractors
+      new Promise(resolve => {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(err => resolve({ success: false, error: err.message }))
+          .getSubcontractorsForClient();
+      }).then(response => {
+        if (!mountedRef.current) return;
+        if (response.success) {
+          setSubcontractors(response.data);
+        } else {
+          showMessage(response.error || 'Failed to load subcontractors', 'error');
+        }
+      });
+    }, []);
+
+    // ============ HELPER FUNCTIONS ============
+    const showMessage = (text, type) => {
       if (!mountedRef.current) return;
-      if (response.success) {
-        setProjects(response.data);
-      } else {
-        showMessage(response.error || 'Failed to load projects', 'error');
-      }
-    });
+      setMessage({ text, type });
+    };
 
-    // getSubcontractors
-    new Promise(resolve => {
-      google.script.run
-        .withSuccessHandler(resolve)
-        .withFailureHandler(err => resolve({ success: false, error: err.message }))
-        .getSubcontractorsForClient();
-    }).then(response => {
+    const resetForm = () => {
       if (!mountedRef.current) return;
-      if (response.success) {
-        setSubcontractors(response.data);
-      } else {
-        showMessage(response.error || 'Failed to load subcontractors', 'error');
+      setSelectedProject('');
+      setSelectedProjectName('');
+      setSelectedProjectFolderId('');
+      setSelectedSubId('');
+      setSelectedSubName('');
+      setCreatingNewSub(false);
+
+      setNewSubName(''); setNewSubAddress(''); setNewSubCity('');
+      setNewSubState(''); setNewSubZip(''); setNewSubContactEmail('');
+      setNewSubPhone('');
+
+      setInvoiceAmount('');
+      setDisplayAmount('');
+      setInvoiceFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setMessage({ text: '', type: '' });
+      setLoading(false);
+    };
+
+    // Currency formatter using US locale
+    const formatAsCurrency = (value) => {
+      const numValue = parseFloat(value);
+      if (isNaN(numValue)) return '';
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+      }).format(numValue);
+    };
+
+    // Currency input handler
+    const handleCurrencyInput = (value, setValue) => {
+      // Remove existing formatting
+      let numbersOnly = value.replace(/[^0-9.]/g, '');
+      
+      // Ensure only one decimal point
+      const parts = numbersOnly.split('.');
+      if (parts.length > 2) {
+        numbersOnly = parts[0] + '.' + parts[1];
       }
-    });
-  }, []);
-
-  // ============ HELPER FUNCTIONS ============
-  const showMessage = (text, type) => {
-    if (!mountedRef.current) return;
-    setMessage({ text, type });
-  };
-
-  const resetForm = () => {
-    if (!mountedRef.current) return;
-    setSelectedProject('');
-    setSelectedProjectName('');
-    setSelectedProjectFolderId('');
-    setSelectedSubId('');
-    setSelectedSubName('');
-    setCreatingNewSub(false);
-
-    setNewSubName(''); setNewSubAddress(''); setNewSubCity('');
-    setNewSubState(''); setNewSubZip(''); setNewSubContactEmail('');
-    setNewSubPhone('');
-
-    setInvoiceAmount('');
-    setDisplayAmount('');
-    setInvoiceFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    setMessage({ text: '', type: '' });
-    setLoading(false);
-  };
-
-  // Currency formatter using US locale
-  const formatAsCurrency = (value) => {
-    const numValue = parseFloat(value);
-    if (isNaN(numValue)) return '';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(numValue);
-  };
-
-  // Currency input handler
-  const handleCurrencyInput = (value, setValue) => {
-    // Remove existing formatting
-    let numbersOnly = value.replace(/[^0-9.]/g, '');
-    
-    // Ensure only one decimal point
-    const parts = numbersOnly.split('.');
-    if (parts.length > 2) {
-      numbersOnly = parts[0] + '.' + parts[1];
-    }
-    
-    // Limit to 2 decimal places
-    if (parts.length > 1) {
-      numbersOnly = parts[0] + '.' + parts[1].slice(0, 2);
-    }
-    
-    // Validate it's a proper number
-    const numValue = parseFloat(numbersOnly);
-    if (!isNaN(numValue)) {
-      setValue(numbersOnly);
-      setDisplayAmount(formatAsCurrency(numValue));
-    }
-  };
-
-  const handleFileChange = e => {
-    const file = e.target.files[0];
-    if (file) {
-      const allowed = ['image/jpeg','image/png','image/gif','application/pdf'];
-      const maxSize = 10 * 1024 * 1024; // 10MB
-
-      console.log('Selected file:', file);
-      console.log('File type:', file.type);
-      console.log('File size:', file.size);
-
-      if(!allowed.includes(file.type)) {
-        showMessage('Please upload an image file (JPEG, PNG, GIF) or PDF', 'error');
-        fileInputRef.current.value = '';
-        return;
+      
+      // Limit to 2 decimal places
+      if (parts.length > 1) {
+        numbersOnly = parts[0] + '.' + parts[1].slice(0, 2);
       }
-      if (file.size > maxSize) {
-        showMessage('File is too large. Max 10MB.', 'error');
-        fileInputRef.current.value = '';
-        return;
+      
+      // Validate it's a proper number
+      const numValue = parseFloat(numbersOnly);
+      if (!isNaN(numValue)) {
+        setValue(numbersOnly);
+        setDisplayAmount(formatAsCurrency(numValue));
       }
-      setInvoiceFile(file);
-      console.log('File accepted for upload');
-    }
-  };
+    };
 
-  // Uploads file to Drive
-  const uploadInvoiceFile = async (file) => {
-    console.log('=== SubInvoice File Upload Start ===');
-    console.log('File:', file);
-    console.log('Selected Project:', selectedProject);
-    console.log('Projects:', projects);
-    console.log('Project Folder ID:', selectedProjectFolderId);
+    const handleFileChange = e => {
+      const file = e.target.files[0];
+      if (file) {
+        const allowed = ['image/jpeg','image/png','image/gif','application/pdf'];
+        const maxSize = 10 * 1024 * 1024; // 10MB
 
-    const selectedProj = projects.find(p => p.id === selectedProject);
-    console.log('Selected Project Details:', selectedProj);
+        console.log('Selected file:', file);
+        console.log('File type:', file.type);
+        console.log('File size:', file.size);
 
-    return new Promise((resolve, reject) => {
-      if (!selectedProjectFolderId) {
-        console.error('ERROR: No project folder selected');
-        console.error('Current Projects:', projects);
-        console.error('Selected Project:', selectedProject);
-        console.error('Selected Project Details:', selectedProj);
+        if(!allowed.includes(file.type)) {
+          showMessage('Please upload an image file (JPEG, PNG, GIF) or PDF', 'error');
+          fileInputRef.current.value = '';
+          return;
+        }
+        if (file.size > maxSize) {
+          showMessage('File is too large. Max 10MB.', 'error');
+          fileInputRef.current.value = '';
+          return;
+        }
+        setInvoiceFile(file);
+        console.log('File accepted for upload');
+      }
+    };
+
+    // Uploads file to Drive
+    const uploadInvoiceFile = async (file) => {
+      console.log('=== SubInvoice File Upload Start ===');
+      console.log('File:', file);
+      console.log('Selected Project:', selectedProject);
+      console.log('Projects:', projects);
+      console.log('Project Folder ID:', selectedProjectFolderId);
+
+      const selectedProj = projects.find(p => p.id === selectedProject);
+      console.log('Selected Project Details:', selectedProj);
+
+      return new Promise((resolve, reject) => {
+        if (!selectedProjectFolderId) {
+          console.error('ERROR: No project folder selected');
+          console.error('Current Projects:', projects);
+          console.error('Selected Project:', selectedProject);
+          console.error('Selected Project Details:', selectedProj);
+          
+          reject(new Error('No SubInvoices folder ID associated with this project'));
+          return;
+        }
         
-        reject(new Error('No SubInvoices folder ID associated with this project'));
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          console.log('FileReader onloadend triggered');
+          console.log('Base64 data length:', reader.result.length);
+          console.log('Folder ID being sent:', selectedProjectFolderId);
+
+          try {
+            const fileInfo = await new Promise((uploadResolve, uploadReject) => {
+              console.log('Calling uploadReceiptFile in Apps Script');
+              google.script.run
+                .withSuccessHandler((result) => {
+                  console.log('Upload success:', result);
+                  if (result.success) {
+                    uploadResolve(result);
+                  } else {
+                    console.error('Upload failed:', result.error);
+                    uploadReject(new Error(result.error || 'Upload failed'));
+                  }
+                })
+                .withFailureHandler((error) => {
+                  console.error('Upload failed:', error);
+                  uploadReject(error);
+                })
+                .uploadReceiptFile(reader.result, selectedProjectFolderId, 'SUBINV');
+            });
+            resolve(fileInfo);
+          } catch (error) {
+            console.error('Error in file upload:', error);
+            reject(error);
+          }
+        };
+        reader.onerror = (error) => {
+          console.error('FileReader error:', error);
+          reject(error);
+        };
+        reader.readAsDataURL(file);
+      });
+    };
+
+    // Format phone number as (XXX) XXX-XXXX
+    const formatPhoneNumber = (value) => {
+      const cleaned = value.replace(/\D/g, '');
+      if (cleaned.length >= 10) {
+        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6,10)}`;
+      } else if (cleaned.length > 6) {
+        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
+      } else if (cleaned.length > 3) {
+        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3)}`;
+      } else if (cleaned.length > 0) {
+        return `(${cleaned}`;
+      }
+      return cleaned;
+    };
+
+    // ============ EVENT HANDLERS ============
+    const handleProjectChange = (e) => {
+      const pid = e.target.value;
+      setSelectedProject(pid);
+
+      console.log('=== Project Selection for SubInvoice ===');
+      console.log('Selected Project ID:', pid);
+
+      const proj = projects.find(p => p.id === pid);
+      console.log('Selected Project:', proj);
+
+      if (!proj) {
+        console.error('No project found for ID:', pid);
+        setSelectedProjectName('');
+        setSelectedProjectFolderId('');
         return;
       }
       
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        console.log('FileReader onloadend triggered');
-        console.log('Base64 data length:', reader.result.length);
-        console.log('Folder ID being sent:', selectedProjectFolderId);
-
-        try {
-          const fileInfo = await new Promise((uploadResolve, uploadReject) => {
-            console.log('Calling uploadReceiptFile in Apps Script');
-            google.script.run
-              .withSuccessHandler((result) => {
-                console.log('Upload success:', result);
-                if (result.success) {
-                  uploadResolve(result);
-                } else {
-                  console.error('Upload failed:', result.error);
-                  uploadReject(new Error(result.error || 'Upload failed'));
-                }
-              })
-              .withFailureHandler((error) => {
-                console.error('Upload failed:', error);
-                uploadReject(error);
-              })
-              .uploadReceiptFile(reader.result, selectedProjectFolderId, 'SUBINV');
-          });
-          resolve(fileInfo);
-        } catch (error) {
-          console.error('Error in file upload:', error);
-          reject(error);
-        }
-      };
-      reader.onerror = (error) => {
-        console.error('FileReader error:', error);
-        reject(error);
-      };
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // Format phone number as (XXX) XXX-XXXX
-  const formatPhoneNumber = (value) => {
-    const cleaned = value.replace(/\D/g, '');
-    if (cleaned.length >= 10) {
-      return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6,10)}`;
-    } else if (cleaned.length > 6) {
-      return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
-    } else if (cleaned.length > 3) {
-      return `(${cleaned.slice(0,3)}) ${cleaned.slice(3)}`;
-    } else if (cleaned.length > 0) {
-      return `(${cleaned}`;
-    }
-    return cleaned;
-  };
-
-  // ============ EVENT HANDLERS ============
-  const handleProjectChange = (e) => {
-    const pid = e.target.value;
-    setSelectedProject(pid);
-
-    console.log('=== Project Selection for SubInvoice ===');
-    console.log('Selected Project ID:', pid);
-
-    const proj = projects.find(p => p.id === pid);
-    console.log('Selected Project:', proj);
-
-    if (!proj) {
-      console.error('No project found for ID:', pid);
-      setSelectedProjectName('');
-      setSelectedProjectFolderId('');
-      return;
-    }
-    
-    console.log('Project Details:', {
-      projectId: proj.projectId,
-      name: proj.name,
-      subInvoicesFolderId: proj.subInvoicesFolderId,
-      materialsFolderId: proj.materialsFolderId,
-      estimatesFolderId: proj.estimatesFolderId,
-      mainFolderId: proj.folderId
-    });
-
-    setSelectedProjectName(proj.name);
-    
-    // Prioritize subInvoicesFolderId, fallback to main project folder
-    const folderToUse = proj.subInvoicesFolderId || proj.folderId;
-    
-    if (folderToUse) {
-      console.log('Selected Folder ID:', folderToUse);
-      setSelectedProjectFolderId(folderToUse);
-    } else {
-      console.error('No folder ID found for project');
-      setSelectedProjectFolderId('');
-      showMessage('No folder ID associated with this project', 'error');
-    }
-
-    // Log all projects for reference
-    console.log('All Projects:', projects);
-  };
-
-  const handleSubChange = (e) => {
-    const val = e.target.value;
-    if (val === 'CREATE_NEW') {
-      setCreatingNewSub(true);
-      setSelectedSubId('');
-      setSelectedSubName('');
-    } else {
-      setCreatingNewSub(false);
-      setSelectedSubId(val);
-      const found = subcontractors.find(s => s.subId === val);
-      setSelectedSubName(found ? found.subName : '');
-    }
-  };
-
-  // ============ SUBMIT ============
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!mountedRef.current) return;
-    setLoading(true);
-    showMessage("Submitting invoice, please wait...", "info");
-
-    try {
-      let finalSubId = selectedSubId;
-      let finalSubName = selectedSubName;
-
-      // 1) If creating new sub
-      if (creatingNewSub) {
-        if (!newSubName.trim()) {
-          throw new Error("Subcontractor Name is required");
-        }
-        const createdSub = await new Promise((resolve, reject) => {
-          google.script.run
-            .withSuccessHandler(res => resolve(res))
-            .withFailureHandler(err => reject(new Error(err.message)))
-            .createSubcontractor({
-              subName: newSubName.trim(),
-              address: newSubAddress.trim(),
-              city: newSubCity.trim(),
-              state: newSubState.trim(),
-              zip: newSubZip.trim(),
-              contactEmail: newSubContactEmail.trim(),
-              phone: newSubPhone.trim()
-            });
-        });
-        finalSubId = createdSub.subId;
-        finalSubName = createdSub.subName;
-      }
-
-      // 2) Upload invoice file if present
-      let fileInfo = null;
-      if (invoiceFile) {
-        fileInfo = await uploadInvoiceFile(invoiceFile);
-      }
-
-      // 3) Submit sub-invoice
-      const response = await new Promise((resolve, reject) => {
-        google.script.run
-          .withSuccessHandler(res => {
-            if (res && (res.success || res.id)) {
-              resolve({ success: true, ...res });
-            } else {
-              reject(new Error("Unexpected server response: " + JSON.stringify(res)));
-            }
-          })
-          .withFailureHandler(err => {
-            reject(new Error(err.message));
-          })
-          .submitSubInvoice({
-            projectId: selectedProject,
-            projectName: selectedProjectName,
-            subId: finalSubId,
-            subName: finalSubName,
-            invoiceAmount: parseFloat(invoiceAmount) || 0,
-            invoiceDocURL: fileInfo?.data?.url || ''
-          });
+      console.log('Project Details:', {
+        projectId: proj.projectId,
+        name: proj.name,
+        subInvoicesFolderId: proj.subInvoicesFolderId,
+        materialsFolderId: proj.materialsFolderId,
+        estimatesFolderId: proj.estimatesFolderId,
+        mainFolderId: proj.folderId
       });
 
+      setSelectedProjectName(proj.name);
+      
+      // Prioritize subInvoicesFolderId, fallback to main project folder
+      const folderToUse = proj.subInvoicesFolderId || proj.folderId;
+      
+      if (folderToUse) {
+        console.log('Selected Folder ID:', folderToUse);
+        setSelectedProjectFolderId(folderToUse);
+      } else {
+        console.error('No folder ID found for project');
+        setSelectedProjectFolderId('');
+        showMessage('No folder ID associated with this project', 'error');
+      }
+
+      // Log all projects for reference
+      console.log('All Projects:', projects);
+    };
+
+    const handleSubChange = (e) => {
+      const val = e.target.value;
+      if (val === 'CREATE_NEW') {
+        setCreatingNewSub(true);
+        setSelectedSubId('');
+        setSelectedSubName('');
+      } else {
+        setCreatingNewSub(false);
+        setSelectedSubId(val);
+        const found = subcontractors.find(s => s.subId === val);
+        setSelectedSubName(found ? found.subName : '');
+      }
+    };
+
+    // ============ SUBMIT ============
+    const handleSubmit = async (e) => {
+      e.preventDefault();
       if (!mountedRef.current) return;
-      showMessage(`✅ Sub-Invoice submitted successfully! Invoice ID: ${response.id}`, 'success');
-      setTimeout(() => {
-        if (mountedRef.current) resetForm();
-      }, 2000);
+      setLoading(true);
+      showMessage("Submitting invoice, please wait...", "info");
 
-    } catch (error) {
-      console.error("❌ Submission Error:", error.message);
-      if (mountedRef.current) {
-        showMessage(error.message || "Unexpected error. Try again.", "error");
+      try {
+        let finalSubId = selectedSubId;
+        let finalSubName = selectedSubName;
+
+        // 1) If creating new sub
+        if (creatingNewSub) {
+          if (!newSubName.trim()) {
+            throw new Error("Subcontractor Name is required");
+          }
+          
+          const createdSub = await new Promise((resolve, reject) => {
+            google.script.run
+              .withSuccessHandler(response => {
+                console.log('Server response for sub creation:', response);
+                if (response && response.success) {
+                  resolve(response.data);
+                } else {
+                  reject(new Error(response?.error || 'Failed to create subcontractor'));
+                }
+              })
+              .withFailureHandler(err => reject(new Error(err.message)))
+              .createSubcontractor({
+                subName: newSubName.trim(),
+                address: newSubAddress.trim(),
+                city: newSubCity.trim(),
+                state: newSubState.trim(),
+                zip: newSubZip.trim(),
+                contactEmail: newSubContactEmail.trim(),
+                phone: newSubPhone.trim()
+              });
+          });
+
+          finalSubId = createdSub.subId;
+          finalSubName = createdSub.subName;
+        }
+
+        // 2) Upload invoice file if present
+        let fileInfo = null;
+        if (invoiceFile) {
+          fileInfo = await uploadInvoiceFile(invoiceFile);
+        }
+
+        // 3) Submit sub-invoice
+        const response = await new Promise((resolve, reject) => {
+          google.script.run
+            .withSuccessHandler(res => {
+              if (res && (res.success || res.id)) {
+                resolve({ success: true, ...res });
+              } else {
+                reject(new Error("Unexpected server response: " + JSON.stringify(res)));
+              }
+            })
+            .withFailureHandler(err => {
+              reject(new Error(err.message));
+            })
+            .submitSubInvoice({
+              projectId: selectedProject,
+              projectName: selectedProjectName,
+              subId: finalSubId,
+              subName: finalSubName,
+              invoiceAmount: parseFloat(invoiceAmount) || 0,
+              invoiceDocURL: fileInfo?.data?.url || ''
+            });
+        });
+
+        if (!mountedRef.current) return;
+        showMessage(`✅ Sub-Invoice submitted successfully! Invoice ID: ${response.id}`, 'success');
+        setTimeout(() => {
+          if (mountedRef.current) resetForm();
+        }, 2000);
+
+      } catch (error) {
+        console.error("❌ Submission Error:", error.message);
+        if (mountedRef.current) {
+          showMessage(error.message || "Unexpected error. Try again.", "error");
+        }
+      } finally {
+        if (mountedRef.current) {
+          setLoading(false);
+        }
       }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
-    }
-  };
+    };
 
-  // ============ RENDER ============
-  return React.createElement('div', { className: styles.container },
-    React.createElement('div', { className: styles.card },
-      React.createElement('h2', { className: 'text-2xl font-bold mb-4' }, 'Submit Sub-Invoice'),
+    // ============ RENDER ============
+    return React.createElement('div', { className: styles.container },
+      React.createElement('div', { className: styles.card },
+        React.createElement('h2', { className: 'text-2xl font-bold mb-4' }, 'Submit Sub-Invoice'),
 
-      // Show messages
-      message.text && React.createElement('div', {
-        className: `mb-4 p-4 rounded ${
-          message.type === 'success' ? 'bg-green-100 text-green-700' :
-          message.type === 'info' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
-        }`
-      }, message.text),
+        // Show messages
+        message.text && React.createElement('div', {
+          className: `mb-4 p-4 rounded ${
+            message.type === 'success' ? 'bg-green-100 text-green-700' :
+            message.type === 'info' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
+          }`
+        }, message.text),
 
-      // Form
-      React.createElement('form', { onSubmit: handleSubmit, className: 'space-y-4' },
-        // Project Dropdown
-        React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Project:'),
-          React.createElement('select', {
-            value: selectedProject,
-            onChange: handleProjectChange,
-            className: 'w-full p-2 border rounded',
-            required: true
-          },
-            React.createElement('option', { value: '' }, 'Select Project'),
-            projects.map(project =>
-              React.createElement('option', {
-                key: project.id,
-                value: project.id
-              }, 
-                `${project.projectId} - ${project.name}${project.jobId ? ` (Job: ${project.jobId})` : ''} - ${project.status}`
-              )
-            )
-          )
-        ),
-
-        // Subcontractor
-        React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Subcontractor:'),
-          React.createElement('select', {
-            value: creatingNewSub ? 'CREATE_NEW' : selectedSubId,
-            onChange: handleSubChange,
-            className: 'w-full p-2 border rounded',
-            required: true
-          },
-            React.createElement('option', { value: '' }, 'Select Subcontractor'),
-            subcontractors.map(sub =>
-              React.createElement('option', { key: sub.subId, value: sub.subId },
-                `${sub.subName} (${sub.subId})`
-              )
-            ),
-            React.createElement('option', { value: 'CREATE_NEW' }, 'Create New Subcontractor')
-          )
-        ),
-
-        // If creating new sub, show these fields:
-        creatingNewSub && React.createElement('div', { className: 'bg-gray-50 p-4 rounded space-y-2' },
+        // Form
+        React.createElement('form', { onSubmit: handleSubmit, className: 'space-y-4' },
+          // Project Dropdown
           React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Sub Name *'),
-            React.createElement('input', {
-              type: 'text',
-              value: newSubName,
-              onChange: e => setNewSubName(e.target.value),
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Project:'),
+            React.createElement('select', {
+              value: selectedProject,
+              onChange: handleProjectChange,
               className: 'w-full p-2 border rounded',
               required: true
-            })
+            },
+              React.createElement('option', { value: '' }, 'Select Project'),
+              projects.map(project =>
+                React.createElement('option', {
+                  key: project.id,
+                  value: project.id
+                }, 
+                  `${project.projectId} - ${project.name}`  // Simplified format
+                )
+              )
+            )
           ),
+
+          // Subcontractor
           React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Address'),
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Subcontractor:'),
+            React.createElement('select', {
+              value: creatingNewSub ? 'CREATE_NEW' : selectedSubId,
+              onChange: handleSubChange,
+              className: 'w-full p-2 border rounded',
+              required: true
+            },
+              React.createElement('option', { value: '' }, 'Select Subcontractor'),
+              subcontractors.map(sub =>
+                React.createElement('option', { key: sub.subId, value: sub.subId },
+                  `${sub.subName} (${sub.subId})`
+                )
+              ),
+              React.createElement('option', { value: 'CREATE_NEW' }, 'Create New Subcontractor')
+            )
+          ),
+
+          // If creating new sub, show these fields:
+          creatingNewSub && React.createElement('div', { className: 'bg-gray-50 p-4 rounded space-y-2' },
+            React.createElement('div', null,
+              React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Sub Name *'),
+              React.createElement('input', {
+                type: 'text',
+                value: newSubName,
+                onChange: e => setNewSubName(e.target.value),
+                className: 'w-full p-2 border rounded',
+                required: true
+              })
+            ),
+            React.createElement('div', null,
+              React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Address'),
+              React.createElement('input', {
+                type: 'text',
+                value: newSubAddress,
+                onChange: e => setNewSubAddress(e.target.value),
+                className: 'w-full p-2 border rounded'
+              })
+            ),
+            React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
+              React.createElement('div', null,
+                React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'City'),
+                React.createElement('input', {
+                  type: 'text',
+                  value: newSubCity,
+                  onChange: e => setNewSubCity(e.target.value),
+                  className: 'w-full p-2 border rounded',
+                  placeholder: 'City'
+                })
+              ),
+              React.createElement('div', null,
+                React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'State'),
+                React.createElement('input', {
+                  type: 'text',
+                  value: newSubState,
+                  onChange: e => setNewSubState(e.target.value),
+                  className: 'w-full p-2 border rounded',
+                  maxLength: 2,
+                  placeholder: 'XX'
+                })
+              )
+            ),
+            React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
+              React.createElement('div', null,
+                React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Zip'),
+                React.createElement('input', {
+                  type: 'text',
+                  value: newSubZip,
+                  onChange: e => setNewSubZip(e.target.value.replace(/\D/g, '').slice(0, 5)),
+                  className: 'w-full p-2 border rounded',
+                  maxLength: 5,
+                  placeholder: '12345'
+                })
+              ),
+              React.createElement('div', null,
+                React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Phone'),
+                React.createElement('input', {
+                  type: 'tel',
+                  value: newSubPhone,
+                  onChange: e => setNewSubPhone(formatPhoneNumber(e.target.value)),
+                  className: 'w-full p-2 border rounded',
+                  placeholder: '(555) 555-5555'
+                })
+              )
+            ),
+            React.createElement('div', null,
+              React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Contact Email'),
+              React.createElement('input', {
+                type: 'email',
+                value: newSubContactEmail,
+                onChange: e => setNewSubContactEmail(e.target.value),
+                className: 'w-full p-2 border rounded',
+                placeholder: 'email@example.com'
+              })
+            )
+          ),
+
+          // Invoice Amount
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Invoice Amount:'),
+            React.createElement('div', { className: 'relative' },
+              React.createElement('span', {
+                className: 'absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500'
+              }, '$'),
+              React.createElement('input', {
+                type: 'text',
+                value: invoiceAmount,
+                onChange: e => handleCurrencyInput(e.target.value, setInvoiceAmount),
+                className: 'w-full p-2 pl-7 border rounded',
+                placeholder: '0.00',
+                required: true
+              })
+            ),
+            displayAmount && React.createElement('div', {
+              className: 'text-sm text-gray-500 mt-1'
+            }, `Entered amount: ${displayAmount}`)
+          ),
+
+          // File Upload
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Upload Invoice (PDF or Image):'),
             React.createElement('input', {
-              type: 'text',
-              value: newSubAddress,
-              onChange: e => setNewSubAddress(e.target.value),
+              type: 'file',
+              ref: fileInputRef,
+              onChange: handleFileChange,
+              accept: 'image/*,application/pdf',
+              capture: 'environment',
               className: 'w-full p-2 border rounded'
             })
           ),
-          React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
-            React.createElement('div', null,
-              React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'City'),
-              React.createElement('input', {
-                type: 'text',
-                value: newSubCity,
-                onChange: e => setNewSubCity(e.target.value),
-                className: 'w-full p-2 border rounded',
-                placeholder: 'City'
-              })
-            ),
-            React.createElement('div', null,
-              React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'State'),
-              React.createElement('input', {
-                type: 'text',
-                value: newSubState,
-                onChange: e => setNewSubState(e.target.value),
-                className: 'w-full p-2 border rounded',
-                maxLength: 2,
-                placeholder: 'XX'
-              })
-            )
-          ),
-          React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
-            React.createElement('div', null,
-              React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Zip'),
-              React.createElement('input', {
-                type: 'text',
-                value: newSubZip,
-                onChange: e => setNewSubZip(e.target.value.replace(/\D/g, '').slice(0, 5)),
-                className: 'w-full p-2 border rounded',
-                maxLength: 5,
-                placeholder: '12345'
-              })
-            ),
-            React.createElement('div', null,
-              React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Phone'),
-              React.createElement('input', {
-                type: 'tel',
-                value: newSubPhone,
-                onChange: e => setNewSubPhone(formatPhoneNumber(e.target.value)),
-                className: 'w-full p-2 border rounded',
-                placeholder: '(555) 555-5555'
-              })
-            )
-          ),
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Contact Email'),
-            React.createElement('input', {
-              type: 'email',
-              value: newSubContactEmail,
-              onChange: e => setNewSubContactEmail(e.target.value),
-              className: 'w-full p-2 border rounded',
-              placeholder: 'email@example.com'
-            })
-          )
-        ),
-
-        // Invoice Amount
-        React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Invoice Amount:'),
-          React.createElement('div', { className: 'relative' },
-            React.createElement('span', {
-              className: 'absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500'
-            }, '$'),
-            React.createElement('input', {
-              type: 'text',
-              value: invoiceAmount,
-              onChange: e => handleCurrencyInput(e.target.value, setInvoiceAmount),
-              className: 'w-full p-2 pl-7 border rounded',
-              placeholder: '0.00',
-              required: true
-            })
-          ),
-          displayAmount && React.createElement('div', {
-            className: 'text-sm text-gray-500 mt-1'
-          }, `Entered amount: ${displayAmount}`)
-        ),
-
-        // File Upload
-        React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Upload Invoice (PDF or Image):'),
-          React.createElement('input', {
-            type: 'file',
-            ref: fileInputRef,
-            onChange: handleFileChange,
-            accept: 'image/*,application/pdf',
-            capture: 'environment',
-            className: 'w-full p-2 border rounded'
-          })
-        ),
-        
-        // Submit Button
-        React.createElement('button', {
-          type: 'submit',
-          className: `w-full p-3 rounded text-white font-medium ${
-            loading ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
-          }`,
-          disabled: loading
-        }, loading ? 'Submitting...' : 'Submit')
+          
+          // Submit Button
+          React.createElement('button', {
+            type: 'submit',
+            className: `w-full p-3 rounded text-white font-medium ${
+              loading ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
+            }`,
+            disabled: loading
+          }, loading ? 'Submitting...' : 'Submit')
+        )
       )
-    )
-  );
-};
+    );
+  };
+
+  // Expose to window - this is critical
+  window.SubInvoice = SubInvoice;
+})();
 </script>

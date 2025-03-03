@@ -22,7 +22,6 @@ const MaterialsReceipt = () => {
   // Receipt details
   const [amount, setAmount] = React.useState('');
   const [displayAmount, setDisplayAmount] = React.useState('');
-  const [forUserEmail, setForUserEmail] = React.useState('');
   const [receiptFile, setReceiptFile] = React.useState(null);
   
   // UI state
@@ -111,7 +110,6 @@ const MaterialsReceipt = () => {
     // Receipt details reset
     setAmount('');
     setDisplayAmount('');
-    setForUserEmail('');
     setReceiptFile(null);
     
     // UI reset
@@ -271,7 +269,7 @@ const MaterialsReceipt = () => {
       console.log('=== handleSubmit triggered ===');
       console.log('Selected Project:', selectedProject);
       console.log('Selected Vendor ID:', selectedVendorId, 'Vendor Name:', selectedVendorName);
-      console.log('Amount (raw):', amount, 'ForUserEmail:', forUserEmail);
+      console.log('Amount (raw):', amount);
       console.log('Receipt File:', receiptFile);
 
       // Validation
@@ -309,50 +307,29 @@ const MaterialsReceipt = () => {
             const vendorResponse = await new Promise((resolve, reject) => {
               google.script.run
                 .withSuccessHandler(response => {
-                  console.log('Raw vendor creation response:', response);
-                  // Even if response is null, we'll resolve with a default structure
-                  resolve(response || { 
-                    success: true, 
-                    data: { 
-                      vendorId: `VEND-${Date.now()}`,  // Fallback ID if needed
-                      vendorName: newVendorName.trim() 
-                    } 
-                  });
+                  console.log('Vendor creation response:', response);
+                  if (response && response.success) {
+                    resolve(response);
+                  } else {
+                    reject(new Error(response?.error || 'Failed to create vendor'));
+                  }
                 })
                 .withFailureHandler(error => {
                   console.error('Server error creating vendor:', error);
                   reject(new Error(error.message || 'Server error creating vendor'));
                 })
-                .createVendorForClient({
-                  vendorName: newVendorName.trim()
-                });
+                .createVendorForClient({ vendorName: newVendorName.trim() });
             });
 
-            console.log('Processed vendor response:', vendorResponse);
-            
-            // Refresh vendors list to include the new vendor
-            const updatedVendors = await new Promise(resolve => {
-              google.script.run
-                .withSuccessHandler(resolve)
-                .withFailureHandler(err => resolve({ success: false, error: err.message }))
-                .getVendorsForClient();
-            });
-
-            if (updatedVendors.success) {
-              setVendors(updatedVendors.data);
-              // Find the newly created vendor in the updated list
-              const newVendor = updatedVendors.data.find(v => v.vendorName === newVendorName.trim());
-              if (newVendor) {
-                finalVendorId = newVendor.vendorId;
-                finalVendorName = newVendor.vendorName;
-              } else {
-                // Use the response data if available, otherwise use defaults
-                finalVendorId = vendorResponse.data?.vendorId;
-                finalVendorName = vendorResponse.data?.vendorName || newVendorName.trim();
-              }
+            if (!vendorResponse.success) {
+              throw new Error(vendorResponse.error || 'Failed to create vendor');
             }
 
-            console.log('Final vendor details:', { finalVendorId, finalVendorName });
+            // Use the standardized response data structure
+            finalVendorId = vendorResponse.data.vendorId;
+            finalVendorName = vendorResponse.data.vendorName;
+
+            console.log('Vendor created:', { finalVendorId, finalVendorName });
           } catch (vendorError) {
             console.error('Vendor creation error:', vendorError);
             throw new Error(`Failed to create vendor: ${vendorError.message}`);
@@ -374,8 +351,7 @@ const MaterialsReceipt = () => {
           vendorId: finalVendorId,
           vendorName: finalVendorName,
           amount: parseFloat(amount),
-          receiptDocURL: fileInfo?.data?.url || '',
-          forUserEmail
+          receiptDocURL: fileInfo?.data?.url || ''
         };
 
         console.log('== Final payload for submitMaterialsReceipt ==');
@@ -445,7 +421,7 @@ const MaterialsReceipt = () => {
                 key: project.id,
                 value: project.id
               }, 
-                `${project.projectId} - ${project.name}${project.jobId ? ` (Job: ${project.jobId})` : ''} - ${project.status}`
+                `${project.projectId} - ${project.name}`  // Simplified format
               )
             )
           )
@@ -504,18 +480,6 @@ const MaterialsReceipt = () => {
           displayAmount && React.createElement('div', {
             className: 'text-sm text-gray-500 mt-1'
           }, `Entered amount: ${displayAmount}`)
-        ),
-
-        // ForUserEmail
-        React.createElement('div', null,
-          React.createElement('label', { className: styles.form.label }, 'For Which Employee Email (optional):'),
-          React.createElement('input', {
-            type: 'email',
-            placeholder: 'If blank, submitted for yourself',
-            value: forUserEmail,
-            onChange: e => setForUserEmail(e.target.value),
-            className: styles.form.input
-          })
         ),
 
         // File Upload
