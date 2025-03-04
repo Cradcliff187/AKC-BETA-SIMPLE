@@ -74,40 +74,6 @@ function getProjects() {
   }
 }
 
-function getActiveProjects() {
-  const { headers, rows } = getSheetData(CONFIG.SHEETS.PROJECTS);
-
-  // Column indexes
-  const projectIdCol = headers.indexOf("ProjectID");
-  const projectNameCol = headers.indexOf("ProjectName");
-  const statusCol = headers.indexOf("Status");
-  const folderIdCol = headers.indexOf("FolderID");
-  const jobIdCol = headers.indexOf("JobID");
-  const estimatesFolderCol = headers.indexOf("EstimatesFolderID");
-  const materialsFolderCol = headers.indexOf("MaterialsFolderID");
-  const subInvoicesFolderCol = headers.indexOf("SubInvoicesFolderID");
-  const docUrlCol = headers.indexOf("DocUrl");  // Add this line
-
-  if ([projectIdCol, projectNameCol, statusCol, folderIdCol, estimatesFolderCol, materialsFolderCol, subInvoicesFolderCol, jobIdCol].includes(-1)) {
-    throw new Error("Required columns not found in Projects sheet");
-  }
-
-  return rows
-    .filter(row => MODULE_ACCESS_STATUSES.includes(row[statusCol]))
-    .map(row => ({
-      id: row[projectIdCol],
-      projectId: row[projectIdCol],
-      name: row[projectNameCol],
-      status: row[statusCol],
-      jobId: row[jobIdCol] || '',
-      folderId: row[folderIdCol],
-      estimatesFolderId: row[estimatesFolderCol],
-      materialsFolderId: row[materialsFolderCol],
-      subInvoicesFolderId: row[subInvoicesFolderCol],
-      docUrl: row[docUrlCol] || `https://drive.google.com/drive/folders/${row[folderIdCol]}`  // Add this line
-    }));
-}
-
 function setWorkspacePermissions(folders) {
   const DOMAIN = 'austinkunzconstruction.com';
 
@@ -525,66 +491,8 @@ function createSubcontractor(data) {
 function getCustomersForClient() {
   try {
     Logger.log('=== Starting getCustomersForClient ===');
-
-    // Get sheet data
-    const sheet = getSheet(CONFIG.SHEETS.CUSTOMERS);
-    if (!sheet) {
-      Logger.log('ERROR: Could not access Customers sheet');
-      return createStandardResponse(false, null, 'Could not access customer data');
-    }
-
-    // Get all data including headers
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-    const rows = data.slice(1); // Skip header row
-
-    Logger.log(`Found ${rows.length} customer rows`);
-
-    // Get column indices
-    const customerIdCol = headers.indexOf('CustomerID');
-    const nameCol = headers.indexOf('CustomerName');
-    const addressCol = headers.indexOf('Address');
-    const cityCol = headers.indexOf('City');
-    const stateCol = headers.indexOf('State');
-    const zipCol = headers.indexOf('Zip');
-    const emailCol = headers.indexOf('ContactEmail');
-    const phoneCol = headers.indexOf('Phone');
-    const statusCol = headers.length - 1; // Status is last column
-
-    // Validate column indices
-    if (customerIdCol === -1 || nameCol === -1) {
-      Logger.log('ERROR: Required columns not found');
-      Logger.log('Headers:', headers);
-      return createStandardResponse(false, null, 'Customer data sheet is missing required columns');
-    }
-
-    // Transform data
-    const customers = rows
-      .filter(row => {
-        // Filter out invalid/empty rows
-        const customerId = row[customerIdCol];
-        return customerId && 
-               !customerId.toString().includes('undefined') && 
-               customerId.toString().trim() !== '';
-      })
-      .map(row => {
-        // Map to customer objects
-        const customer = {
-          customerId: row[customerIdCol],
-          name: row[nameCol] || '',
-          address: row[addressCol] || '',
-          city: row[cityCol] || '',
-          state: row[stateCol] || '',
-          zip: row[zipCol] || '',
-          email: row[emailCol] || '',
-          phone: row[phoneCol] || '',
-          status: row[statusCol] || 'Active'
-        };
-        Logger.log(`Processed customer: ${customer.customerId} - ${customer.name}`);
-        return customer;
-      });
-
-    Logger.log(`Returning ${customers.length} valid customers`);
+    // Use the consolidated getCustomers function from Database.js
+    const customers = getCustomers();
     return createStandardResponse(true, customers);
   } catch (error) {
     Logger.log('ERROR in getCustomersForClient:', error.message);
@@ -964,48 +872,127 @@ function testGetTemplate() {
 function updateEstimateStatusForClient(data) {
   const context = 'updateEstimateStatusForClient';
   try {
-    const { estimateId, newStatus } = data;
+    Logger.log(`Starting status update for estimate ${data.estimateId} to ${data.newStatus}`);
     
-    // First update estimate status
-    const result = updateEstimateStatus(estimateId, newStatus, Session.getActiveUser().getEmail());
-    
-    // If estimate is being approved, also update the associated project
-    if (newStatus === ESTIMATE_STATUSES.APPROVED) {
-      const estimate = getEstimateById(estimateId);
-      if (estimate && estimate.projectId) {
-        updateProjectStatus(estimate.projectId, PROJECT_STATUSES.APPROVED, Session.getActiveUser().getEmail());
-      }
+    if (!data.estimateId || !data.newStatus) {
+      throw new Error('Estimate ID and new status are required');
     }
+
+    // Update status in spreadsheet
+    const sheet = getSheet(CONFIG.SHEETS.ESTIMATES);
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0];
+    const estimateIdCol = headers.indexOf("EstimateID");
+    const statusCol = headers.indexOf("Status");
     
-    return createStandardResponse(true, result);
+    const rowIndex = values.findIndex(row => row[estimateIdCol] === data.estimateId);
+    if (rowIndex === -1) {
+      throw new Error('Estimate not found');
+    }
+
+    // Get current status for validation
+    const currentStatus = values[rowIndex][statusCol];
+
+    // Validate the status transition
+    validateStatusTransition(currentStatus, data.newStatus, 'ESTIMATE');
+
+    // Update the status
+    sheet.getRange(rowIndex + 1, statusCol + 1).setValue(data.newStatus);
+    
+    Logger.log(`Successfully updated estimate ${data.estimateId} status to ${data.newStatus}`);
+
+    // Log activity
+    logSystemActivity(
+      'ESTIMATE_STATUS_CHANGED',
+      'ESTIMATE',
+      data.estimateId,
+      {
+        oldStatus: currentStatus,
+        newStatus: data.newStatus,
+        updatedBy: Session.getActiveUser().getEmail()
+      }
+    );
+
+    return createStandardResponse(true, {
+      estimateId: data.estimateId,
+      oldStatus: currentStatus,
+      newStatus: data.newStatus
+    });
+    
   } catch (error) {
-    return handleError(error, context);
+    Logger.log(`Error in ${context}: ${error.message}`);
+    Logger.log(`Stack: ${error.stack}`);
+    return createStandardResponse(false, null, error.message);
   }
 }
 
 function updateProjectStatusForClient(data) {
   const context = 'updateProjectStatusForClient';
   try {
-    // Validate required fields
-    const requiredFields = ['projectId', 'newStatus'];
-    const validation = validateRequiredFields(data, requiredFields);
-    if (!validation.valid) {
-      return createStandardResponse(false, null, validation.error);
+    Logger.log(`Starting status update for project ${data.projectId} to ${data.newStatus}`);
+    
+    if (!data.projectId || !data.newStatus) {
+      throw new Error('Project ID and new status are required');
     }
 
-    const userEmail = Session.getActiveUser().getEmail();
+    // Get project using the new helper function
+    const project = getProjectById(data.projectId);
+    if (!project) {
+      throw new Error(`Project ${data.projectId} not found`);
+    }
+
+    Logger.log(`Found project. Current status: ${project.status}`);
+
+    // Validate the status transition
+    validateStatusTransition(project.status, data.newStatus, 'PROJECT');
+
+    // Update status in spreadsheet
+    const sheet = getSheet(CONFIG.SHEETS.PROJECTS);
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0];
+    const projectIdCol = headers.indexOf("ProjectID");
+    const statusCol = headers.indexOf("Status");
     
-    // Call database function
-    const result = updateProjectStatus(
+    const rowIndex = values.findIndex(row => row[projectIdCol] === data.projectId);
+    if (rowIndex === -1) {
+      throw new Error('Project row not found');
+    }
+
+    // Update the status
+    sheet.getRange(rowIndex + 1, statusCol + 1).setValue(data.newStatus);
+    
+    Logger.log(`Successfully updated project ${data.projectId} status to ${data.newStatus}`);
+
+    // Log the status change
+    logSystemActivity(
+      'PROJECT_STATUS_CHANGED',
+      'PROJECT',
       data.projectId,
-      data.newStatus,
-      userEmail
+      {
+        oldStatus: project.status,
+        newStatus: data.newStatus,
+        updatedBy: Session.getActiveUser().getEmail()
+      }
     );
 
-    return createStandardResponse(true, result.data);
+    return createStandardResponse(true, {
+      projectId: data.projectId,
+      oldStatus: project.status,
+      newStatus: data.newStatus
+    });
+    
   } catch (error) {
-    return handleError(error, context);
+    Logger.log(`Error in ${context}: ${error.message}`);
+    Logger.log(`Stack: ${error.stack}`);
+    return createStandardResponse(false, null, error.message);
   }
+}
+
+// Helper function to check for open items
+function checkForOpenItems(projectId) {
+  // Add your logic to check for open items
+  // Return true if there are open items, false otherwise
+  return false;
 }
 
 function loadPreviousEstimateVersion(data) {
@@ -1151,8 +1138,10 @@ function createAndSaveEstimate(data) {
     Logger.log('Logging estimate...');
     const logResult = logEstimate({
       ...data,
-      totalAmount: parseFloat(data.amount) || 0, // Fix: pass amount as totalAmount
+      totalAmount: parseFloat(data.amount) || 0,
       contingencyAmount: parseFloat(data.contingencyAmount) || 0,
+      customerName: data.customerName, // Ensure customerName is passed through
+      projectName: data.projectName, // Make sure this is included
       // Use the correct site location data based on selection
       siteLocationAddress: data.usePrimaryAddress ? data.customerAddress : data.siteLocationAddress,
       siteLocationCity: data.usePrimaryAddress ? data.customerCity : data.siteLocationCity,
@@ -1263,13 +1252,14 @@ function getProjectsByStatus(status) {
     const statusCol = headers.indexOf('Status');
     const customerNameCol = headers.indexOf('CustomerName');
 
-    // Filter and map in one pass
+    // Filter and map to include all required fields
     const filteredProjects = rows
       .filter(row => row[statusCol] === status)
       .map(row => ({
         id: row[projectIdCol],
         projectId: row[projectIdCol],
-        name: row[nameCol],
+        name: row[nameCol],        // Project Name
+        projectName: row[nameCol], // Include both for compatibility
         status: row[statusCol],
         customerName: row[customerNameCol] || ''
       }));
@@ -1289,35 +1279,97 @@ function getEstimatesByStatus(status) {
   try {
     Logger.log(`Getting estimates with status: ${status}`);
     
-    // Get all estimates using the same getSheetData helper function
     const { headers, rows } = getSheetData(CONFIG.SHEETS.ESTIMATES);
     
-    // Match the same simple column structure as projects
     const estimateIdCol = headers.indexOf('EstimateID');
     const projectIdCol = headers.indexOf('ProjectID');
     const statusCol = headers.indexOf('Status');
     const customerNameCol = headers.indexOf('CustomerName');
     const amountCol = headers.indexOf('EstimateAmount');
+    const projectNameCol = headers.indexOf('ProjectName');  // Make sure this exists
 
-    // Filter and map in one pass, just like projects
     const filteredEstimates = rows
       .filter(row => row[statusCol] === status)
       .map(row => ({
         id: row[estimateIdCol],
         estimateId: row[estimateIdCol],
-        projectId: row[projectIdCol] || '',
-        name: `Estimate ${row[estimateIdCol]}`,  // Added for consistency with project display
+        projectName: row[projectNameCol] || 'N/A',  // Project Name
+        customerName: row[customerNameCol] || 'N/A',
         status: row[statusCol],
-        customerName: row[customerNameCol] || '',
         amount: row[amountCol] || 0
       }));
 
     Logger.log(`Found ${filteredEstimates.length} estimates with status ${status}`);
-    
     return createStandardResponse(true, filteredEstimates);
   } catch (error) {
     Logger.log(`Error in ${context}: ${error.message}`);
     Logger.log(`Stack: ${error.stack}`);
     return createStandardResponse(false, [], error.message);
+  }
+}
+
+function getProjectDetails(projectId) {
+  const context = 'getProjectDetails';
+  try {
+    const { headers, rows } = getSheetData(CONFIG.SHEETS.PROJECTS);
+    
+    const projectIdCol = headers.indexOf('ProjectID');
+    const nameCol = headers.indexOf('ProjectName');
+    const statusCol = headers.indexOf('Status');
+    const customerNameCol = headers.indexOf('CustomerName');
+    const jobDescriptionCol = headers.indexOf('JobDescription');
+    const docUrlCol = headers.indexOf('DocUrl');
+    const folderIdCol = headers.indexOf('FolderID');
+
+    const projectRow = rows.find(row => row[projectIdCol] === projectId);
+    
+    if (!projectRow) {
+      return createStandardResponse(false, null, 'Project not found');
+    }
+
+    return createStandardResponse(true, {
+      id: projectRow[projectIdCol],
+      name: projectRow[nameCol],
+      status: projectRow[statusCol],
+      customerName: projectRow[customerNameCol] || '',
+      jobDescription: projectRow[jobDescriptionCol] || '',
+      docUrl: projectRow[docUrlCol] || `https://drive.google.com/drive/folders/${projectRow[folderIdCol]}`,
+      folderId: projectRow[folderIdCol]
+    });
+  } catch (error) {
+    return handleError(error, context);
+  }
+}
+
+function getEstimateDetails(estimateId) {
+  const context = 'getEstimateDetails';
+  try {
+    const { headers, rows } = getSheetData(CONFIG.SHEETS.ESTIMATES);
+    
+    const estimateIdCol = headers.indexOf('EstimateID');
+    const projectIdCol = headers.indexOf('ProjectID');
+    const statusCol = headers.indexOf('Status');
+    const customerNameCol = headers.indexOf('CustomerName');
+    const amountCol = headers.indexOf('EstimateAmount');
+    const docUrlCol = headers.indexOf('DocUrl');
+    const jobDescriptionCol = headers.indexOf('JobDescription');
+
+    const estimateRow = rows.find(row => row[estimateIdCol] === estimateId);
+    
+    if (!estimateRow) {
+      return createStandardResponse(false, null, 'Estimate not found');
+    }
+
+    return createStandardResponse(true, {
+      id: estimateRow[estimateIdCol],
+      projectId: estimateRow[projectIdCol],
+      status: estimateRow[statusCol],
+      customerName: estimateRow[customerNameCol] || '',
+      amount: estimateRow[amountCol] || 0,
+      docUrl: estimateRow[docUrlCol] || '',
+      jobDescription: estimateRow[jobDescriptionCol] || ''
+    });
+  } catch (error) {
+    return handleError(error, context);
   }
 }

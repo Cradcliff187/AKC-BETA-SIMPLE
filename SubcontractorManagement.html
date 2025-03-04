@@ -211,8 +211,140 @@
     );
   };
 
+  // === Edit Subcontractor Form Component ===
+  const EditSubcontractorForm = ({ subcontractor, onSubmit, onCancel }) => {
+    const [formData, setFormData] = React.useState({
+      subId: subcontractor.subId,
+      subName: subcontractor.subName || '',
+      address: subcontractor.address || '',
+      city: subcontractor.city || '',
+      state: subcontractor.state || '',
+      zip: subcontractor.zip || '',
+      contactEmail: subcontractor.contactEmail || '',
+      phone: subcontractor.phone || ''
+    });
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      onSubmit(formData);
+    };
+
+    // Phone number formatter
+    const formatPhoneNumber = (value) => {
+      const cleaned = value.replace(/\D/g, '');
+      if (cleaned.length >= 10) {
+        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6,10)}`;
+      } else if (cleaned.length > 6) {
+        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
+      } else if (cleaned.length > 3) {
+        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3)}`;
+      } else if (cleaned.length > 0) {
+        return `(${cleaned}`;
+      }
+      return cleaned;
+    };
+
+    return React.createElement('div', { className: 'space-y-4 bg-white p-6 rounded-lg shadow' },
+      React.createElement('h3', { className: 'text-lg font-semibold' }, 'Edit Subcontractor'),
+      React.createElement('form', { onSubmit: handleSubmit, className: 'space-y-4' },
+        // Subcontractor Name (required)
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Subcontractor Name *'),
+          React.createElement('input', {
+            type: 'text',
+            required: true,
+            value: formData.subName,
+            onChange: e => setFormData(prev => ({ ...prev, subName: e.target.value })),
+            className: 'w-full p-2 border rounded'
+          })
+        ),
+        // Address
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Address'),
+          React.createElement('input', {
+            type: 'text',
+            value: formData.address,
+            onChange: e => setFormData(prev => ({ ...prev, address: e.target.value })),
+            className: 'w-full p-2 border rounded'
+          })
+        ),
+        // City, State, Zip
+        React.createElement('div', { className: 'grid grid-cols-3 gap-4' },
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'City'),
+            React.createElement('input', {
+              type: 'text',
+              value: formData.city,
+              onChange: e => setFormData(prev => ({ ...prev, city: e.target.value })),
+              className: 'w-full p-2 border rounded'
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'State'),
+            React.createElement('input', {
+              type: 'text',
+              maxLength: 2,
+              value: formData.state,
+              onChange: e => setFormData(prev => ({ ...prev, state: e.target.value.toUpperCase() })),
+              className: 'w-full p-2 border rounded'
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'ZIP'),
+            React.createElement('input', {
+              type: 'text',
+              maxLength: 5,
+              value: formData.zip,
+              onChange: e => setFormData(prev => ({ 
+                ...prev, 
+                zip: e.target.value.replace(/\D/g, '').slice(0, 5)
+              })),
+              className: 'w-full p-2 border rounded'
+            })
+          )
+        ),
+        // Contact Info
+        React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Phone'),
+            React.createElement('input', {
+              type: 'tel',
+              value: formData.phone,
+              onChange: e => setFormData(prev => ({ 
+                ...prev, 
+                phone: formatPhoneNumber(e.target.value)
+              })),
+              className: 'w-full p-2 border rounded'
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Email'),
+            React.createElement('input', {
+              type: 'email',
+              value: formData.contactEmail,
+              onChange: e => setFormData(prev => ({ ...prev, contactEmail: e.target.value })),
+              className: 'w-full p-2 border rounded'
+            })
+          )
+        ),
+        // Buttons
+        React.createElement('div', { className: 'flex justify-end space-x-4 pt-4' },
+          React.createElement('button', {
+            type: 'button',
+            onClick: onCancel,
+            className: 'px-4 py-2 border rounded hover:bg-gray-50'
+          }, 'Cancel'),
+          React.createElement('button', {
+            type: 'submit',
+            className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700'
+          }, 'Update Subcontractor')
+        )
+      )
+    );
+  };
+
   // === Main SubcontractorManagement Component ===
-  const SubcontractorManagement = ({ showMessage, loading: parentLoading, setLoading: setParentLoading }) => {
+  const SubcontractorManagement = ({ showMessage, loading: parentLoading, setLoading: setParentLoading, onUpdate }) => {
     // Remove local loading state, use parent's exclusively
     const setLoading = setParentLoading;
     const mountedRef = React.useRef(true);
@@ -223,6 +355,7 @@
     const [selectedSubcontractor, setSelectedSubcontractor] = React.useState(null);
     const [viewMode, setViewMode] = React.useState('list');
     const [isCreating, setIsCreating] = React.useState(false);
+    const [isEditing, setIsEditing] = React.useState(false);
     const [searchTerm, setSearchTerm] = React.useState('');
     const [statusFilter, setStatusFilter] = React.useState('All');
 
@@ -354,6 +487,32 @@
       } catch (error) {
         console.error('Error creating subcontractor:', error);
         showMessage(error.message || 'Error creating subcontractor', 'error');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleUpdateSubcontractor = async (formData) => {
+      setLoading(true);
+      try {
+        const response = await new Promise((resolve, reject) => {
+          google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(reject)
+            .updateSubcontractor(formData);
+        });
+
+        if (response.success) {
+          showMessage('Subcontractor updated successfully', 'success');
+          setIsEditing(false);
+          fetchSubcontractors();
+          if (onUpdate) onUpdate('subcontractor');
+        } else {
+          throw new Error(response.error || 'Failed to update subcontractor');
+        }
+      } catch (error) {
+        console.error('Error updating subcontractor:', error);
+        showMessage(error.message || 'Error updating subcontractor', 'error');
       } finally {
         setLoading(false);
       }
@@ -540,7 +699,20 @@
               )
             )
           )
-        )
+        ),
+        isEditing ? 
+          React.createElement(EditSubcontractorForm, {
+            subcontractor: selectedSubcontractor,
+            onSubmit: handleUpdateSubcontractor,
+            onCancel: () => setIsEditing(false)
+          }) :
+          React.createElement(React.Fragment, null,
+            // Add Edit button
+            React.createElement('button', {
+              onClick: () => setIsEditing(true),
+              className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700'
+            }, 'Edit Subcontractor')
+          )
       );
     };
 

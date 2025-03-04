@@ -1,33 +1,16 @@
 <script>
 (function() {
-  // === Status Constants ===
-  const PROJECT_STATUSES = {
-    PENDING: 'PENDING',
-    APPROVED: 'APPROVED',
-    IN_PROGRESS: 'IN_PROGRESS',
-    COMPLETED: 'COMPLETED',
-    CANCELED: 'CANCELED'
+  // Add at the top of the Dashboard.html script
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(amount);
   };
 
-  const ESTIMATE_STATUSES = {
-    PENDING: 'PENDING',
-    APPROVED: 'APPROVED'
-  };
-
-  // Add status transitions map
-  const STATUS_TRANSITIONS = {
-    PROJECT: {
-      [PROJECT_STATUSES.PENDING]: [PROJECT_STATUSES.APPROVED, PROJECT_STATUSES.CANCELED],
-      [PROJECT_STATUSES.APPROVED]: [PROJECT_STATUSES.IN_PROGRESS, PROJECT_STATUSES.CANCELED],
-      [PROJECT_STATUSES.IN_PROGRESS]: [PROJECT_STATUSES.COMPLETED, PROJECT_STATUSES.CANCELED],
-      [PROJECT_STATUSES.COMPLETED]: [],
-      [PROJECT_STATUSES.CANCELED]: []
-    },
-    ESTIMATE: {
-      [ESTIMATE_STATUSES.PENDING]: [ESTIMATE_STATUSES.APPROVED],
-      [ESTIMATE_STATUSES.APPROVED]: []
-    }
-  };
+  // Remove duplicate constants since they're already in Config.js
+  // We can reference them directly from the global scope:
+  // PROJECT_STATUSES, ESTIMATE_STATUSES, STATUS_TRANSITIONS
 
   // === Standardized Loading Overlay ===
   const StandardLoadingOverlay = ({ message = 'Loading...' }) => {
@@ -253,16 +236,23 @@
     };
 
     // === Item List Modal ===
-    const ItemListModal = ({ isOpen, type, status, onClose }) => {
+    const ItemListModal = ({ isOpen, type, status, onClose, onAnalyticsChange }) => {
+      // Add loading ref to prevent duplicate requests
+      const loadingRef = React.useRef(false);
       const [items, setItems] = React.useState([]);
       const [loading, setLoading] = React.useState(true);
       const [error, setError] = React.useState(null);
+      const [selectedItem, setSelectedItem] = React.useState(null);
+      const [viewMode, setViewMode] = React.useState('list');
 
+      // Modify loadItems to use ref-based loading check
       const loadItems = React.useCallback(() => {
-        if (!isOpen) return;
+        if (!isOpen || loadingRef.current) return;
+        
+        loadingRef.current = true;
         setLoading(true);
         setError(null);
-
+  
         const endpoint = type === 'project' ? 'getProjectsByStatus' : 'getEstimatesByStatus';
         
         console.log(`Fetching ${type}s with status: ${status}`);
@@ -277,60 +267,78 @@
               console.error(`Null response received for ${type}s`);
               setError(`Failed to fetch ${type}s - null response`);
               setItems([]);
-              setLoading(false);
-              return;
-            }
-
-            // Handle both standardized and legacy response formats
-            let processedItems;
-            if (Array.isArray(response)) {
-              // Handle legacy array response
-              processedItems = response;
-              console.log(`Processing ${processedItems.length} ${type}s (legacy format)`);
-            } else if (response.success && Array.isArray(response.data)) {
-              // Handle new standardized response format
-              processedItems = response.data;
-              console.log(`Processing ${processedItems.length} ${type}s (standard format)`);
             } else {
-              console.error(`Invalid response format for ${type}s`);
-              setError(`Invalid response format`);
-              setItems([]);
-              setLoading(false);
-              return;
+              // Handle both standardized and legacy response formats
+              let processedItems;
+              if (Array.isArray(response)) {
+                processedItems = response;
+                console.log(`Processing ${processedItems.length} ${type}s (legacy format)`);
+              } else if (response.success && Array.isArray(response.data)) {
+                processedItems = response.data;
+                console.log(`Processing ${processedItems.length} ${type}s (standard format)`);
+              } else {
+                console.error(`Invalid response format for ${type}s`);
+                setError(`Invalid response format`);
+                setItems([]);
+                return;
+              }
+  
+              // Normalize the data structure
+              const normalizedItems = processedItems.map(item => ({
+                id: item.id || item.projectId || item.estimateId,
+                projectId: item.projectId,
+                estimateId: item.estimateId,
+                name: item.name || item.projectName,
+                projectName: item.projectName,
+                customerName: item.customerName || 'N/A',
+                status: item.status || 'Unknown'
+              }));
+  
+              setItems(normalizedItems);
             }
-
-            // Normalize the data structure
-            const normalizedItems = processedItems.map(item => ({
-              id: item.id || item.projectId || item.estimateId,
-              name: type === 'project' ? item.name : `Estimate ${item.id || item.estimateId}`,
-              customerName: item.customerName || 'N/A',
-              status: item.status,
-              projectId: item.projectId,
-              estimateId: item.estimateId
-            }));
-
-            setItems(normalizedItems);
             setLoading(false);
+            loadingRef.current = false;
           })
           .withFailureHandler(error => {
             if (!isOpen) return;
+            
             const errorMsg = error?.message || `Failed to fetch ${type}s`;
             console.error(`Server error fetching ${type}s:`, error);
             setError(errorMsg);
             setItems([]);
             setLoading(false);
+            loadingRef.current = false;
           })
           [endpoint](status);
       }, [isOpen, type, status]);
 
-      // Load items when modal opens
+      // Cleanup effect
+      React.useEffect(() => {
+        return () => {
+          loadingRef.current = false;
+        };
+      }, []);
+
+      // Load items effect
       React.useEffect(() => {
         if (isOpen) {
           loadItems();
         }
+        return () => {
+          // Reset state when modal closes
+          setItems([]);
+          setError(null);
+          setSelectedItem(null);
+          setViewMode('list');
+        };
       }, [isOpen, loadItems]);
 
-      const handleStatusUpdate = async (itemId, newStatus) => {
+      const handleStatusUpdate = async (itemId, newStatus, comment) => {
+        // Add confirmation dialog
+        if (!confirm(`Are you sure you want to change the status to ${newStatus}?`)) {
+          return;
+        }
+
         setLoading(true);
         
         const endpoint = type === 'project' ? 'updateProjectStatusForClient' : 'updateEstimateStatusForClient';
@@ -343,18 +351,26 @@
               .withFailureHandler(reject)
               [endpoint]({
                 [idField]: itemId,
-                newStatus
+                newStatus,
+                comment
               });
           });
 
           if (response.success) {
-            loadItems(); // Refresh the list after successful update
+            // Refresh the items list
+            loadItems();
+            
+            // Trigger analytics refresh in parent
+            if (onAnalyticsChange) {
+              onAnalyticsChange();
+            }
           } else {
             throw new Error(response.error || 'Update failed');
           }
         } catch (error) {
           console.error('Status update error:', error);
           setError('Failed to update status');
+        } finally {
           setLoading(false);
         }
       };
@@ -368,6 +384,159 @@
         return transitions[currentStatus];
       };
 
+      // Add function to load detailed item data
+      const loadItemDetails = React.useCallback((itemId) => {
+        setLoading(true);
+        const endpoint = type === 'project' ? 'getProjectDetails' : 'getEstimateDetails';
+        
+        google.script.run
+          .withSuccessHandler(response => {
+            if (response.success) {
+              setSelectedItem(response.data);
+            } else {
+              setError(response.error || 'Failed to load details');
+            }
+            setLoading(false);
+          })
+          .withFailureHandler(error => {
+            setError(error.message || 'Failed to load details');
+            setLoading(false);
+          })
+          [endpoint](itemId);
+      }, [type]);
+
+      // Add view details handler
+      const handleViewDetails = (item) => {
+        setSelectedItem(item);
+        loadItemDetails(item.id || item.projectId || item.estimateId);
+        setViewMode('detail');
+      };
+
+      // Add back to list handler
+      const handleBackToList = () => {
+        setViewMode('list');
+        setSelectedItem(null);
+      };
+
+      // Add state for status modal
+      const [statusModalOpen, setStatusModalOpen] = React.useState(false);
+
+      // Add StatusChangeModal to ItemListModal render
+      const StatusChangeModal = ({ item, isOpen, onClose, onStatusChange }) => {
+        if (!isOpen) return null;
+        
+        const currentStatus = item.status;
+        const availableStatuses = getAvailableStatuses(currentStatus);
+        const [selectedStatus, setSelectedStatus] = React.useState('');
+        const [comment, setComment] = React.useState('');
+
+        const handleSubmit = () => {
+          if (!selectedStatus) {
+            showMessage('Please select a status', 'error');
+            return;
+          }
+          onStatusChange(item.id, selectedStatus, comment);
+          onClose();
+        };
+
+        return React.createElement('div', {
+          className: 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'
+        },
+          React.createElement('div', {
+            className: 'bg-white rounded-lg p-6 w-full max-w-lg'
+          },
+            // Header
+            React.createElement('div', { className: 'mb-6' },
+              React.createElement('h3', { 
+                className: 'text-lg font-semibold' 
+              }, 'Update Status'),
+              React.createElement('div', { className: 'mt-2 space-y-1 text-sm text-gray-600' },
+                React.createElement('p', null, `Estimate ID: ${item.estimateId || item.id}`),
+                React.createElement('p', null, `Project Name: ${item.projectName || item.name}`),
+                React.createElement('p', null, `Customer: ${item.customerName}`),
+                React.createElement('p', null, `Current Status: ${currentStatus}`)
+              )
+            ),
+            
+            // Status Timeline
+            React.createElement('div', { className: 'mb-6' },
+              React.createElement('div', { className: 'flex items-center space-x-4' },
+                availableStatuses.map((status, index) => 
+                  React.createElement('div', { 
+                    key: status,
+                    className: 'flex items-center'
+                  },
+                    React.createElement('div', {
+                      className: `w-8 h-8 rounded-full flex items-center justify-center ${
+                        status === currentStatus ? 'bg-blue-500 text-white' : 'bg-gray-200'
+                      }`
+                    }, index + 1),
+                    React.createElement('div', { className: 'ml-2 text-sm' }, status),
+                    index < availableStatuses.length - 1 && React.createElement('div', {
+                      className: 'w-8 h-0.5 bg-gray-200 ml-2'
+                    })
+                  )
+                )
+              )
+            ),
+
+            // Status Selection
+            React.createElement('div', { className: 'mb-4' },
+              React.createElement('label', { 
+                className: 'block text-sm font-medium text-gray-700 mb-2'
+              }, 'New Status'),
+              React.createElement('select', {
+                value: selectedStatus,
+                onChange: (e) => setSelectedStatus(e.target.value),
+                className: 'w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500'
+              },
+                React.createElement('option', { value: '' }, 'Select status...'),
+                availableStatuses.map(status =>
+                  React.createElement('option', {
+                    key: status,
+                    value: status,
+                    disabled: status === currentStatus
+                  }, status)
+                )
+              )
+            ),
+
+            // Comment Field
+            React.createElement('div', { className: 'mb-6' },
+              React.createElement('label', {
+                className: 'block text-sm font-medium text-gray-700 mb-2'
+              }, 'Comment (Optional)'),
+              React.createElement('textarea', {
+                value: comment,
+                onChange: (e) => setComment(e.target.value),
+                className: 'w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500',
+                rows: '3'
+              })
+            ),
+
+            // Action Buttons
+            React.createElement('div', { className: 'flex justify-end space-x-3' },
+              React.createElement('button', {
+                onClick: onClose,
+                className: 'px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50'
+              }, 'Cancel'),
+              React.createElement('button', {
+                onClick: handleSubmit,
+                disabled: !selectedStatus,
+                className: `px-4 py-2 rounded-md text-sm font-medium text-white ${
+                  selectedStatus ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400 cursor-not-allowed'
+                }`
+              }, 'Update Status')
+            )
+          )
+        );
+      };
+
+      const handleStatusChange = (item) => {
+        setSelectedItem(item);
+        setStatusModalOpen(true);
+      };
+
       if (!isOpen) return null;
 
       return React.createElement('div', {
@@ -378,70 +547,118 @@
         },
           React.createElement('div', { className: 'flex justify-between items-center mb-4' },
             React.createElement('h3', { className: 'text-lg font-semibold' }, 
-              `${status} ${type.charAt(0).toUpperCase() + type.slice(1)}s`
+              viewMode === 'list' 
+                ? `${status} ${type.charAt(0).toUpperCase() + type.slice(1)}s`
+                : `${type.charAt(0).toUpperCase() + type.slice(1)} Details`
             ),
-            React.createElement('button', {
-              onClick: onClose,
-              className: 'text-gray-500 hover:text-gray-700 text-xl'
-            }, '×')
+            React.createElement('div', { className: 'flex gap-2' },
+              viewMode === 'detail' && React.createElement('button', {
+                onClick: handleBackToList,
+                className: 'text-blue-600 hover:text-blue-800'
+              }, 'Back to List'),
+              React.createElement('button', {
+                onClick: onClose,
+                className: 'text-gray-500 hover:text-gray-700 text-xl'
+              }, '×')
+            )
           ),
-          error ? React.createElement('div', { 
+          error && React.createElement('div', { 
             className: 'text-red-600 mb-4 p-4 bg-red-50 rounded' 
-          }, error) : null,
+          }, error),
           loading ? 
             React.createElement(StandardLoadingOverlay, { message: `Loading ${type}s...` }) :
-            items.length === 0 ?
-              React.createElement('div', { 
-                className: 'text-center py-8 text-gray-500' 
-              }, `No ${status.toLowerCase()} ${type}s found`) :
-              React.createElement('table', { className: 'min-w-full divide-y divide-gray-200' },
-                React.createElement('thead', { className: 'bg-gray-50' },
-                  React.createElement('tr', null,
-                    ['ID', 'Name', 'Customer', 'Status', 'Actions'].map(header =>
-                      React.createElement('th', {
-                        key: header,
-                        className: 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'
-                      }, header)
+            viewMode === 'list' ?
+              // List View
+              items.length === 0 ?
+                React.createElement('div', { 
+                  className: 'text-center py-8 text-gray-500' 
+                }, `No ${status.toLowerCase()} ${type}s found`) :
+                React.createElement('table', { className: 'min-w-full divide-y divide-gray-200' },
+                  React.createElement('thead', { className: 'bg-gray-50' },
+                    React.createElement('tr', null,
+                      ['Estimate ID', 'Project Name', 'Customer', 'Status', 'Actions'].map(header =>
+                        React.createElement('th', {
+                          key: header,
+                          className: 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'
+                        }, header)
+                      )
                     )
-                  )
-                ),
-                React.createElement('tbody', { className: 'bg-white divide-y divide-gray-200' },
-                  items.map(item =>
-                    React.createElement('tr', { key: item.id || item.projectId || item.estimateId },
-                      React.createElement('td', { className: 'px-6 py-4' }, 
-                        item.id || item.projectId || item.estimateId
-                      ),
-                      React.createElement('td', { className: 'px-6 py-4' }, 
-                        type === 'project' ? item.name : `Estimate ${item.id}`
-                      ),
-                      React.createElement('td', { className: 'px-6 py-4' }, 
-                        item.customerName
-                      ),
-                      React.createElement('td', { className: 'px-6 py-4' }, 
-                        item.status
-                      ),
-                      React.createElement('td', { className: 'px-6 py-4' },
-                        React.createElement('select', {
-                          value: item.status,
-                          onChange: (e) => handleStatusUpdate(
-                            item.id || item.projectId || item.estimateId, 
-                            e.target.value
-                          ),
-                          className: 'border rounded px-2 py-1'
-                        },
-                          getAvailableStatuses(item.status).map(value =>
-                            React.createElement('option', {
-                              key: value,
-                              value: value
-                            }, value)
+                  ),
+                  React.createElement('tbody', { className: 'bg-white divide-y divide-gray-200' },
+                    items.map(item =>
+                      React.createElement('tr', { 
+                        key: item.id,
+                        onClick: () => handleViewDetails(item),
+                        className: 'cursor-pointer hover:bg-gray-50'  // Add pointer cursor and hover effect
+                      },
+                        React.createElement('td', { className: 'px-6 py-4' }, 
+                          item.estimateId || item.id
+                        ),
+                        React.createElement('td', { className: 'px-6 py-4' }, 
+                          item.projectName || ''
+                        ),
+                        React.createElement('td', { className: 'px-6 py-4' }, 
+                          item.customerName
+                        ),
+                        React.createElement('td', { className: 'px-6 py-4' }, 
+                          item.status
+                        ),
+                        React.createElement('td', { className: 'px-6 py-4' },
+                          React.createElement('button', {
+                            onClick: (e) => {
+                              e.stopPropagation();  // Prevent row click when clicking button
+                              handleStatusChange(item);
+                            },
+                            className: 'inline-flex items-center px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
+                          },
+                            React.createElement('span', { className: 'mr-2' }, 'Change Status'),
+                            React.createElement('svg', {
+                              className: 'h-4 w-4',
+                              fill: 'none',
+                              strokeLinecap: 'round',
+                              strokeLinejoin: 'round',
+                              strokeWidth: '2',
+                              viewBox: '0 0 24 24',
+                              stroke: 'currentColor'
+                            },
+                              React.createElement('path', { d: 'M19 9l-7 7-7-7' })
+                            )
                           )
                         )
                       )
                     )
                   )
+                ) :
+              // Detail View
+              selectedItem && React.createElement('div', { className: 'space-y-4' },
+                // Item Details Section
+                React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
+                  React.createElement('div', { className: 'space-y-2' },
+                    React.createElement('h4', { className: 'font-semibold' }, 'Basic Information'),
+                    React.createElement('p', null, `ID: ${selectedItem.id || selectedItem.projectId || selectedItem.estimateId}`),
+                    React.createElement('p', null, `Name: ${selectedItem.name}`),
+                    React.createElement('p', null, `Status: ${selectedItem.status}`),
+                    React.createElement('p', null, `Customer: ${selectedItem.customerName}`)
+                  ),
+                  React.createElement('div', { className: 'space-y-2' },
+                    React.createElement('h4', { className: 'font-semibold' }, 'Additional Information'),
+                    selectedItem.jobDescription && React.createElement('p', null, `Description: ${selectedItem.jobDescription}`),
+                    selectedItem.amount && React.createElement('p', null, `Amount: ${formatCurrency(selectedItem.amount)}`),
+                    selectedItem.docUrl && React.createElement('a', {
+                      href: selectedItem.docUrl,
+                      target: '_blank',
+                      className: 'text-blue-600 hover:text-blue-800'
+                    }, 'View Document')
+                  )
                 )
               )
-        )
+        ),
+        React.createElement(StatusChangeModal, {
+          item: selectedItem,
+          isOpen: statusModalOpen,
+          onClose: () => setStatusModalOpen(false),
+          onStatusChange: handleStatusUpdate
+        })
       );
     };
 
@@ -461,6 +678,31 @@
       });
     };
 
+    // Add analytics refresh function
+    const refreshAnalytics = React.useCallback(() => {
+      setComponentLoading(true);
+      fetchAnalytics()
+        .then(() => setComponentLoading(false))
+        .catch(error => {
+          console.error('Error refreshing analytics:', error);
+          setComponentLoading(false);
+        });
+    }, [fetchAnalytics]);
+
+    const refreshData = React.useCallback(async (entityType) => {
+      if (!mountedRef.current) return;
+      setComponentLoading(true);
+  
+      try {
+        await fetchAnalytics();
+        showMessage(`${entityType} updated successfully`, 'success');
+      } catch (error) {
+        showMessage(`Error refreshing data: ${error.message}`, 'error');
+      } finally {
+        setComponentLoading(false);
+      }
+    }, [fetchAnalytics, showMessage]);
+
     // === Content Rendering ===
     const renderContent = React.useCallback(() => {
       if (!initialized || loading) return null;
@@ -470,6 +712,7 @@
         loading: componentLoading,
         setLoading: setComponentLoading,
         analytics: analytics[activeTab] || {},
+        onUpdate: refreshData,  // Add this prop
         key: activeTab // Add key to force remount on tab change
       };
 
@@ -493,7 +736,7 @@
       }
 
       return React.createElement(Component, props);
-    }, [activeTab, loading, componentLoading, analytics, showMessage, initialized]);
+    }, [activeTab, loading, componentLoading, analytics, showMessage, initialized, refreshData]);
 
     // === Main Render ===
     return React.createElement('div', { 
@@ -534,7 +777,8 @@
         isOpen: listModal.isOpen,
         type: listModal.type,
         status: listModal.status,
-        onClose: () => setListModal({ isOpen: false, type: null, status: null })
+        onClose: () => setListModal({ isOpen: false, type: null, status: null }),
+        onAnalyticsChange: refreshAnalytics // Add this prop
       })
     );
   };

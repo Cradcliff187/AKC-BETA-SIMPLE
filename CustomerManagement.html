@@ -131,6 +131,143 @@
     );
   };
 
+  // === EditCustomerForm Component ===
+  const EditCustomerForm = ({ customer, onSubmit, onCancel }) => {
+    const [formData, setFormData] = React.useState({
+      customerId: customer.customerId,
+      name: customer.name || '',
+      email: customer.email || '',
+      phone: customer.phone || '',
+      address: customer.address || '',
+      city: customer.city || '',
+      state: customer.state || '',
+      zip: customer.zip || ''
+    });
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      onSubmit(formData);
+    };
+
+    // Phone number formatter
+    const formatPhoneNumber = (value) => {
+      const cleaned = value.replace(/\D/g, '');
+      if (cleaned.length >= 10) {
+        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6,10)}`;
+      } else if (cleaned.length > 6) {
+        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
+      } else if (cleaned.length > 3) {
+        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3)}`;
+      } else if (cleaned.length > 0) {
+        return `(${cleaned}`;
+      }
+      return cleaned;
+    };
+
+    return React.createElement('div', { className: 'space-y-4 bg-white p-6 rounded-lg shadow' },
+      React.createElement('h3', { className: 'text-lg font-semibold' }, 'Edit Customer'),
+      React.createElement('form', { onSubmit: handleSubmit, className: 'space-y-4' },
+        // Form fields similar to CreateCustomerForm
+        // Include hidden customerId field
+        React.createElement('input', {
+          type: 'hidden',
+          value: formData.customerId
+        }),
+        // Name field
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Customer Name *'),
+          React.createElement('input', {
+            type: 'text',
+            required: true,
+            value: formData.name,
+            onChange: e => setFormData(prev => ({ ...prev, name: e.target.value })),
+            className: 'w-full p-2 border rounded'
+          })
+        ),
+        // Contact Info
+        React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Email'),
+            React.createElement('input', {
+              type: 'email',
+              value: formData.email,
+              onChange: e => setFormData(prev => ({ ...prev, email: e.target.value })),
+              className: 'w-full p-2 border rounded'
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Phone'),
+            React.createElement('input', {
+              type: 'tel',
+              value: formData.phone,
+              onChange: e => setFormData(prev => ({ 
+                ...prev, 
+                phone: formatPhoneNumber(e.target.value)
+              })),
+              className: 'w-full p-2 border rounded'
+            })
+          )
+        ),
+        // Address fields
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Address'),
+          React.createElement('input', {
+            type: 'text',
+            value: formData.address,
+            onChange: e => setFormData(prev => ({ ...prev, address: e.target.value })),
+            className: 'w-full p-2 border rounded'
+          })
+        ),
+        React.createElement('div', { className: 'grid grid-cols-3 gap-4' },
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'City'),
+            React.createElement('input', {
+              type: 'text',
+              value: formData.city,
+              onChange: e => setFormData(prev => ({ ...prev, city: e.target.value })),
+              className: 'w-full p-2 border rounded'
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'State'),
+            React.createElement('input', {
+              type: 'text',
+              maxLength: 2,
+              value: formData.state,
+              onChange: e => setFormData(prev => ({ ...prev, state: e.target.value.toUpperCase() })),
+              className: 'w-full p-2 border rounded'
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'ZIP'),
+            React.createElement('input', {
+              type: 'text',
+              maxLength: 5,
+              value: formData.zip,
+              onChange: e => setFormData(prev => ({ 
+                ...prev, 
+                zip: e.target.value.replace(/\D/g, '').slice(0, 5)
+              })),
+              className: 'w-full p-2 border rounded'
+            })
+          )
+        ),
+        // Buttons
+        React.createElement('div', { className: 'flex justify-end space-x-4 pt-4' },
+          React.createElement('button', {
+            type: 'button',
+            onClick: onCancel,
+            className: 'px-4 py-2 border rounded hover:bg-gray-50'
+          }, 'Cancel'),
+          React.createElement('button', {
+            type: 'submit',
+            className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700'
+          }, 'Save Changes')
+        )
+      )
+    );
+  };
+
   // === Standardized Loading Overlay ===
   const StandardLoadingOverlay = ({ message = 'Loading...' }) => {
     return React.createElement('div', {
@@ -211,7 +348,7 @@
   };
 
   // === Main CustomerManagement Component ===
-  const CustomerManagement = ({ showMessage, loading: parentLoading, setLoading: setParentLoading }) => {
+  const CustomerManagement = ({ showMessage, loading: parentLoading, setLoading: setParentLoading, onUpdate }) => {
     // Remove local loading state, use parent's exclusively
     const setLoading = setParentLoading;
     const mountedRef = React.useRef(true);
@@ -222,6 +359,7 @@
     const [selectedCustomer, setSelectedCustomer] = React.useState(null);
     const [viewMode, setViewMode] = React.useState('list');
     const [isCreating, setIsCreating] = React.useState(false);
+    const [isEditing, setIsEditing] = React.useState(false);
     const [searchTerm, setSearchTerm] = React.useState('');
     const [statusFilter, setStatusFilter] = React.useState('All');
 
@@ -358,6 +496,32 @@
       }
     };
 
+    const handleUpdateCustomer = async (formData) => {
+      setLoading(true);
+      try {
+        const response = await new Promise((resolve, reject) => {
+          google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(reject)
+            .updateCustomer(formData);
+        });
+
+        if (response.success) {
+          showMessage('Customer updated successfully', 'success');
+          setIsEditing(false);
+          fetchCustomers();
+          if (onUpdate) onUpdate('customer');
+        } else {
+          throw new Error(response.error || 'Failed to update customer');
+        }
+      } catch (error) {
+        console.error('Error updating customer:', error);
+        showMessage(error.message || 'Error updating customer', 'error');
+      } finally {
+        setLoading(false);
+      }
+    };
+
     // Phone number formatter
     const formatPhoneNumber = (value) => {
       const cleaned = value.replace(/\D/g, '');
@@ -436,72 +600,85 @@
           )
         ),
 
-        // Contact Information Card
-        React.createElement('div', { className: 'bg-white p-4 sm:p-6 rounded-lg shadow-sm' },
-          React.createElement('h4', { className: 'font-semibold mb-4' }, 'Contact Information'),
-          React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-4' },
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Email:'),
-              React.createElement('p', null, selectedCustomer.email || 'N/A')
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Phone:'),
-              React.createElement('p', null, selectedCustomer.phone || 'N/A')
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Address:'),
-              React.createElement('p', null, 
-                [
-                  selectedCustomer.address, 
-                  selectedCustomer.city, 
-                  selectedCustomer.state, 
-                  selectedCustomer.zip
-                ].filter(Boolean).join(', ') || 'N/A'
+        isEditing ? 
+          React.createElement(EditCustomerForm, {
+            customer: selectedCustomer,
+            onSubmit: handleUpdateCustomer,
+            onCancel: () => setIsEditing(false)
+          }) :
+          React.createElement(React.Fragment, null,
+            // Add Edit button
+            React.createElement('button', {
+              onClick: () => setIsEditing(true),
+              className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700'
+            }, 'Edit Customer'),
+            // Contact Information Card
+            React.createElement('div', { className: 'bg-white p-4 sm:p-6 rounded-lg shadow-sm' },
+              React.createElement('h4', { className: 'font-semibold mb-4' }, 'Contact Information'),
+              React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-4' },
+                React.createElement('div', null,
+                  React.createElement('p', { className: 'text-sm text-gray-600' }, 'Email:'),
+                  React.createElement('p', null, selectedCustomer.email || 'N/A')
+                ),
+                React.createElement('div', null,
+                  React.createElement('p', { className: 'text-sm text-gray-600' }, 'Phone:'),
+                  React.createElement('p', null, selectedCustomer.phone || 'N/A')
+                ),
+                React.createElement('div', null,
+                  React.createElement('p', { className: 'text-sm text-gray-600' }, 'Address:'),
+                  React.createElement('p', null, 
+                    [
+                      selectedCustomer.address, 
+                      selectedCustomer.city, 
+                      selectedCustomer.state, 
+                      selectedCustomer.zip
+                    ].filter(Boolean).join(', ') || 'N/A'
+                  )
+                ),
+                React.createElement('div', null,
+                  React.createElement('p', { className: 'text-sm text-gray-600' }, 'Status:'),
+                  React.createElement('p', null, selectedCustomer.status || 'Unknown')
+                )
               )
             ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Status:'),
-              React.createElement('p', null, selectedCustomer.status || 'Unknown')
-            )
-          )
-        ),
 
-        // Metrics Card
-        React.createElement('div', { className: 'bg-white p-4 sm:p-6 rounded-lg shadow-sm' },
-          React.createElement('h4', { className: 'font-semibold mb-4' }, 'Customer Metrics'),
-          React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4' },
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Total Projects:'),
-              React.createElement('p', { className: 'text-lg font-semibold' }, 
-                selectedCustomer.metrics?.totalProjects || 0
-              )
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Active Projects:'),
-              React.createElement('p', { className: 'text-lg font-semibold' }, 
-                selectedCustomer.metrics?.activeProjects || 0
-              )
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Total Revenue:'),
-              React.createElement('p', { className: 'text-lg font-semibold' }, 
-                new Intl.NumberFormat('en-US', {
-                  style: 'currency',
-                  currency: 'USD'
-                }).format(selectedCustomer.metrics?.totalRevenue || 0)
-              )
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Avg Project Value:'),
-              React.createElement('p', { className: 'text-lg font-semibold' }, 
-                new Intl.NumberFormat('en-US', {
-                  style: 'currency',
-                  currency: 'USD'
-                }).format(selectedCustomer.metrics?.averageProjectValue || 0)
+            // Metrics Card
+            React.createElement('div', { className: 'bg-white p-4 sm:p-6 rounded-lg shadow-sm' },
+              React.createElement('h4', { className: 'font-semibold mb-4' }, 'Customer Metrics'),
+              React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4' },
+                React.createElement('div', null,
+                  React.createElement('p', { className: 'text-sm text-gray-600' }, 'Total Projects:'),
+                  React.createElement('p', { className: 'text-lg font-semibold' }, 
+                    selectedCustomer.metrics?.totalProjects || 0
+                  )
+                ),
+                React.createElement('div', null,
+                  React.createElement('p', { className: 'text-sm text-gray-600' }, 'Active Projects:'),
+                  React.createElement('p', { className: 'text-lg font-semibold' }, 
+                    selectedCustomer.metrics?.activeProjects || 0
+                  )
+                ),
+                React.createElement('div', null,
+                  React.createElement('p', { className: 'text-sm text-gray-600' }, 'Total Revenue:'),
+                  React.createElement('p', { className: 'text-lg font-semibold' }, 
+                    new Intl.NumberFormat('en-US', {
+                      style: 'currency',
+                      currency: 'USD'
+                    }).format(selectedCustomer.metrics?.totalRevenue || 0)
+                  )
+                ),
+                React.createElement('div', null,
+                  React.createElement('p', { className: 'text-sm text-gray-600' }, 'Avg Project Value:'),
+                  React.createElement('p', { className: 'text-lg font-semibold' }, 
+                    new Intl.NumberFormat('en-US', {
+                      style: 'currency',
+                      currency: 'USD'
+                    }).format(selectedCustomer.metrics?.averageProjectValue || 0)
+                  )
+                )
               )
             )
           )
-        )
       );
     };
 

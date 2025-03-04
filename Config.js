@@ -51,8 +51,12 @@ const PROJECT_STATUSES = {
 };
 
 const ESTIMATE_STATUSES = {
-  PENDING: 'PENDING',
-  APPROVED: 'APPROVED'
+  PENDING: 'PENDING',      // Initial state
+  APPROVED: 'APPROVED',    // Estimate is approved
+  REJECTED: 'REJECTED',    // Estimate is rejected
+  CANCELED: 'CANCELED',    // Estimate is canceled
+  COMPLETED: 'COMPLETED',  // Work completed
+  CLOSED: 'CLOSED'        // Final state
 };
 
 // Update vendor statuses to only have ACTIVE and INACTIVE
@@ -72,12 +76,24 @@ const STATUS_TRANSITIONS = {
     [PROJECT_STATUSES.CLOSED]: []
   },
   ESTIMATE: {
-    [ESTIMATE_STATUSES.PENDING]: [ESTIMATE_STATUSES.APPROVED, ESTIMATE_STATUSES.REJECTED, ESTIMATE_STATUSES.CANCELED],
-    [ESTIMATE_STATUSES.APPROVED]: [ESTIMATE_STATUSES.COMPLETED, ESTIMATE_STATUSES.CANCELED],
-    [ESTIMATE_STATUSES.REJECTED]: [ESTIMATE_STATUSES.PENDING, ESTIMATE_STATUSES.CANCELED],
-    [ESTIMATE_STATUSES.COMPLETED]: [ESTIMATE_STATUSES.CLOSED],
-    [ESTIMATE_STATUSES.CANCELED]: [],
-    [ESTIMATE_STATUSES.CLOSED]: []
+    [ESTIMATE_STATUSES.PENDING]: [
+      ESTIMATE_STATUSES.APPROVED,
+      ESTIMATE_STATUSES.REJECTED,
+      ESTIMATE_STATUSES.CANCELED
+    ],
+    [ESTIMATE_STATUSES.APPROVED]: [
+      ESTIMATE_STATUSES.COMPLETED,
+      ESTIMATE_STATUSES.CANCELED
+    ],
+    [ESTIMATE_STATUSES.REJECTED]: [
+      ESTIMATE_STATUSES.PENDING,
+      ESTIMATE_STATUSES.CANCELED
+    ],
+    [ESTIMATE_STATUSES.COMPLETED]: [
+      ESTIMATE_STATUSES.CLOSED
+    ],
+    [ESTIMATE_STATUSES.CANCELED]: [],  // No further transitions
+    [ESTIMATE_STATUSES.CLOSED]: []     // No further transitions
   }
 };
 
@@ -97,3 +113,18 @@ const VENDOR_TYPES = {
   VENDOR: 'Vend',
   SUBCONTRACTOR: 'Sub'
 };
+
+// Update getClientConstants to include all needed constants
+function getClientConstants() {
+  return {
+    PROJECT_STATUSES,
+    ESTIMATE_STATUSES,
+    STATUS_TRANSITIONS,
+    VENDOR_STATUSES,
+    CUSTOMER_STATUSES,
+    MODULE_ACCESS_STATUSES
+  };
+}
+
+// Remove this function as it's now in Utils.js
+// function validateStatusTransition(currentStatus, newStatus, type) { ... }

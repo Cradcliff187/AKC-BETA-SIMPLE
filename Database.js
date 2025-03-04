@@ -484,51 +484,9 @@ function getVendors() {
   }));
 }
 
-// Subcontractor Data Fetching
-function getSubcontractors() {
-  const { headers, rows } = getSheetData(CONFIG.SHEETS.SUBCONTRACTORS);
-  const subIdCol = headers.indexOf("SubID");
-  const subNameCol = headers.indexOf("SubName");
-  const addressCol = headers.indexOf("Address");
-  const cityCol = headers.indexOf("City");
-  const stateCol = headers.indexOf("State");
-  const zipCol = headers.indexOf("Zip");
-  const emailCol = headers.indexOf("ContactEmail");
-  const phoneCol = headers.indexOf("Phone");
-  const statusCol = headers.indexOf("Status");
-
-  return rows.map(row => ({
-    subId: row[subIdCol],
-    subName: row[subNameCol],
-    address: row[addressCol],
-    city: row[cityCol],
-    state: row[stateCol],
-    zip: row[zipCol],
-    contactEmail: row[emailCol],
-    phone: row[phoneCol],
-    status: row[statusCol] || 'Active'
-  }));
-}
-
 // ==========================================
 // VENDOR FUNCTIONS
 // ==========================================
-
-function getVendors() {
-  const { headers, rows } = getSheetData(CONFIG.SHEETS.VENDORS);
-  
-  const vendorIdCol = headers.indexOf("VendorID");     // e.g. "VEND-001"
-  const vendorNameCol = headers.indexOf("VendorName");  // e.g. "Home Depot"
-  
-  if (vendorIdCol === -1 || vendorNameCol === -1) {
-    throw new Error("Required columns not found in Vendors sheet");
-  }
-
-  return rows.map(row => ({
-    vendorId: row[vendorIdCol],
-    vendorName: row[vendorNameCol]
-  }));
-}
 
 function createVendor(data) {
   const sheet = getSheet(CONFIG.SHEETS.VENDORS);
@@ -767,7 +725,7 @@ function updateEstimateStatus(estimateId, newStatus, userEmail) {
   }
   
   const oldStatus = data[rowIndex][statusCol];
-  validateStatusTransition(oldStatus, newStatus, 'ESTIMATE');
+  validateStatusTransition(oldStatus, newStatus, 'ESTIMATE');  // This now uses the Utils.js version
   
   // Update status
   sheet.getRange(rowIndex + 1, statusCol + 1).setValue(newStatus);
@@ -809,7 +767,7 @@ function updateProjectStatus(projectId, newStatus, userEmail) {
     
     // Validate status transition
     try {
-      validateStatusTransition(oldStatus, newStatus, 'PROJECT');
+      validateStatusTransition(oldStatus, newStatus, 'PROJECT');  // This now uses the Utils.js version
     } catch (error) {
       Logger.log(`Status transition validation failed: ${error.message}`);
       Logger.log(`Old status: ${oldStatus}, New status: ${newStatus}`);
@@ -853,12 +811,7 @@ function updateProjectStatus(projectId, newStatus, userEmail) {
 function logEstimate(data) {
   Logger.log('=== logEstimate called ===');
   Logger.log('Data received:' + JSON.stringify(data));
-  Logger.log('Amount values:', {
-    amount: data.amount,
-    totalAmount: data.totalAmount,
-    estimateAmount: data.estimateAmount
-  });
-
+  
   const sheet = getSheet(CONFIG.SHEETS.ESTIMATES);
   if (!sheet) {
     Logger.log('Estimates sheet not found');
@@ -877,18 +830,9 @@ function logEstimate(data) {
 
   const now = new Date();
   const userEmail = Session.getActiveUser().getEmail();
-  const initialStatus = 'PENDING';  // Changed from 'DRAFT' to 'PENDING'
+  const initialStatus = 'PENDING';
 
-  // Check if ContingencyAmount column exists
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const hasContingencyColumn = headers.includes('ContingencyAmount');
-
-  // If column doesn't exist, add it
-  if (!hasContingencyColumn) {
-    sheet.getRange(1, headers.length + 1).setValue('ContingencyAmount');
-  }
-
-  // Updated row data structure to match new schema
+  // Updated row data structure to match sheet columns exactly
   const rowData = [
     finalEstimateId,                // A: EstimateID
     data.projectId || '',           // B: ProjectID
@@ -897,33 +841,24 @@ function logEstimate(data) {
     parseFloat(data.estimateAmount) || parseFloat(data.totalAmount) || parseFloat(data.amount) || 0,   // E: EstimateAmount
     parseFloat(data.contingencyAmount) || 0,  // F: ContingencyAmount
     userEmail,                      // G: CreatedBy
-    '',                             // H: DocUrl placeholder
-    '',                             // I: DocId placeholder
-    initialStatus,                  // J: Status
-    '',                             // K: SentDate
-    'true',                         // L: IsActive
-    '',                             // M: ApprovedDate
+    '',                            // H: DocUrl placeholder
+    '',                            // I: DocId placeholder
+    initialStatus,                 // J: Status
+    '',                            // K: SentDate
+    'true',                        // L: IsActive
+    '',                            // M: ApprovedDate
     data.siteLocationAddress || '', // N: SiteLocationAddress
     data.siteLocationCity || '',    // O: SiteLocationCity
     data.siteLocationState || '',   // P: SiteLocationState
     data.siteLocationZip || '',     // Q: SiteLocationZip
-    data.poNumber || '',            // R: PONumber
-    data.jobDescription || ''       // S: JobDescription
+    data.poNumber || '',            // R: PO#
+    data.jobDescription || '',      // S: Job Description
+    data.customerName || '',        // T: CustomerName
+    data.projectName || ''          // U: ProjectName (NEW)
   ];
 
-  Logger.log('Appending row data to ESTIMATES sheet:', rowData);
   sheet.appendRow(rowData);
 
-  // After logging the estimate, update the project details
-  updateProjectDetails(data.projectId, {
-    jobDescription: data.jobDescription || '',
-    siteLocationAddress: data.siteLocationAddress || '',
-    siteLocationCity: data.siteLocationCity || '',
-    siteLocationState: data.siteLocationState || '',
-    siteLocationZip: data.siteLocationZip || ''
-  });
-
-  Logger.log('Successfully appended row. Returning logEstimate result.');
   return {
     estimateId: finalEstimateId,
     createdOn: now,
@@ -931,7 +866,6 @@ function logEstimate(data) {
   };
 }
 
-// Add this new function to handle project updates
 function updateProjectDetails(projectId, data) {
   const sheet = getSheet(CONFIG.SHEETS.PROJECTS);
   const values = sheet.getDataRange().getValues();
@@ -1035,31 +969,6 @@ function updateSubInvoiceDocUrl(invoiceId, docUrl, docId) {
 // FUNCTIONS FOR CUSTOMER MANGEMENT MODULE
 // ==========================================
 
-function getCustomers() {
-  const { headers, rows } = getSheetData(CONFIG.SHEETS.CUSTOMERS);
-  const customerIdCol = headers.indexOf("CustomerID");
-  const nameCol = headers.indexOf("CustomerName");
-  const addressCol = headers.indexOf("Address");
-  const cityCol = headers.indexOf("City");
-  const stateCol = headers.indexOf("State");
-  const zipCol = headers.indexOf("Zip");
-  const emailCol = headers.indexOf("ContactEmail");
-  const phoneCol = headers.indexOf("Phone");
-  const statusCol = headers.length - 1; // Status is last column
-  
-  return rows.map(row => ({
-    customerId: row[customerIdCol],
-    name: row[nameCol],
-    address: row[addressCol],
-    city: row[cityCol],
-    state: row[stateCol],
-    zip: row[zipCol],
-    email: row[emailCol],
-    phone: row[phoneCol],
-    status: row[statusCol] || CUSTOMER_STATUSES.ACTIVE // Default to ACTIVE if not set
-  }));
-}
-
 function getCustomerProjects(customerId) {
   const { headers, rows } = getSheetData(CONFIG.SHEETS.PROJECTS);
   
@@ -1135,6 +1044,185 @@ function enrichCustomerData(customer) {
       lastActivity: projects.length ? new Date(Math.max(...projects.map(p => new Date(p.createdOn)))) : null
     }
   };
+}
+
+function getProjectById(projectId) {
+  const { headers, rows } = getSheetData(CONFIG.SHEETS.PROJECTS);
+  
+  const projectIdCol = headers.indexOf("ProjectID");
+  const projectNameCol = headers.indexOf("ProjectName");
+  const statusCol = headers.indexOf("Status");
+  const customerNameCol = headers.indexOf("CustomerName");
+  const folderIdCol = headers.indexOf("FolderID");
+  const jobIdCol = headers.indexOf("JobID");
+  
+  const projectRow = rows.find(row => row[projectIdCol] === projectId);
+  
+  if (!projectRow) return null;
+  
+  return {
+    id: projectRow[projectIdCol],
+    projectId: projectRow[projectIdCol],
+    name: projectRow[projectNameCol],
+    status: projectRow[statusCol],
+    customerName: projectRow[customerNameCol] || '',
+    folderId: projectRow[folderIdCol],
+    jobId: projectRow[jobIdCol] || ''
+  };
+}
+
+function getEstimateById(estimateId) {
+  const { headers, rows } = getSheetData(CONFIG.SHEETS.ESTIMATES);
+  
+  const estimateIdCol = headers.indexOf("EstimateID");
+  const projectIdCol = headers.indexOf("ProjectID");
+  const statusCol = headers.indexOf("Status");
+  const customerNameCol = headers.indexOf("CustomerName");
+  const amountCol = headers.indexOf("EstimateAmount");
+  const docUrlCol = headers.indexOf("DocUrl");
+  const projectNameCol = headers.indexOf("ProjectName");  // Add this
+  
+  const estimateRow = rows.find(row => row[estimateIdCol] === estimateId);
+  
+  if (!estimateRow) return null;
+  
+  return {
+    id: estimateRow[estimateIdCol],
+    estimateId: estimateRow[estimateIdCol],
+    projectId: estimateRow[projectIdCol],
+    status: estimateRow[statusCol],
+    customerName: estimateRow[customerNameCol] || '',
+    amount: estimateRow[amountCol] || 0,
+    docUrl: estimateRow[docUrlCol] || '',
+    projectName: estimateRow[projectNameCol] || ''  // Add this
+  };
+}
+
+function getEstimatesByStatus(status) {
+  const context = 'getEstimatesByStatus';
+  try {
+    Logger.log(`Getting estimates with status: ${status}`);
+    
+    const { headers, rows } = getSheetData(CONFIG.SHEETS.ESTIMATES);
+    
+    const estimateIdCol = headers.indexOf('EstimateID');
+    const projectIdCol = headers.indexOf('ProjectID');
+    const statusCol = headers.indexOf('Status');
+    const customerNameCol = headers.indexOf('CustomerName');
+    const amountCol = headers.indexOf('EstimateAmount');
+    const projectNameCol = headers.indexOf('ProjectName');  // Add this
+
+    // Filter and map in one pass
+    const filteredEstimates = rows
+      .filter(row => row[statusCol] === status)
+      .map(row => ({
+        id: row[estimateIdCol],
+        estimateId: row[estimateIdCol],
+        projectId: row[projectIdCol] || '',
+        name: `Estimate ${row[estimateIdCol]}`,
+        status: row[statusCol],
+        customerName: row[customerNameCol] || '',
+        amount: row[amountCol] || 0,
+        projectName: row[projectNameCol] || ''  // Add this
+      }));
+
+    Logger.log(`Found ${filteredEstimates.length} estimates with status ${status}`);
+    return filteredEstimates;
+    
+  } catch (error) {
+    Logger.log(`Error in ${context}: ${error.message}`);
+    Logger.log(`Stack: ${error.stack}`);
+    throw error;
+  }
+}
+
+// ==========================================
+// NEW: UPDATE CUSTOMER, SUBCONTRACTOR, AND VENDOR DATA
+// ==========================================
+
+function updateCustomerData(customerId, data) {
+  const sheet = getSheet(CONFIG.SHEETS.CUSTOMERS);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  
+  const customerIdCol = headers.indexOf("CustomerID");
+  const nameCol = headers.indexOf("CustomerName");
+  const addressCol = headers.indexOf("Address");
+  const cityCol = headers.indexOf("City");
+  const stateCol = headers.indexOf("State");
+  const zipCol = headers.indexOf("Zip");
+  const emailCol = headers.indexOf("ContactEmail");
+  const phoneCol = headers.indexOf("Phone");
+  
+  const rowIndex = values.findIndex(row => row[customerIdCol] === customerId);
+  if (rowIndex === -1) throw new Error("Customer not found");
+  
+  // Update fields if provided
+  if (data.name) sheet.getRange(rowIndex + 1, nameCol + 1).setValue(data.name);
+  if (data.address) sheet.getRange(rowIndex + 1, addressCol + 1).setValue(data.address);
+  if (data.city) sheet.getRange(rowIndex + 1, cityCol + 1).setValue(data.city);
+  if (data.state) sheet.getRange(rowIndex + 1, stateCol + 1).setValue(data.state);
+  if (data.zip) sheet.getRange(rowIndex + 1, zipCol + 1).setValue(data.zip);
+  if (data.email) sheet.getRange(rowIndex + 1, emailCol + 1).setValue(data.email);
+  if (data.phone) sheet.getRange(rowIndex + 1, phoneCol + 1).setValue(data.phone);
+  
+  return { success: true };
+}
+
+function updateSubcontractorData(subId, data) {
+  const sheet = getSheet(CONFIG.SHEETS.SUBCONTRACTORS);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  
+  const subIdCol = headers.indexOf("SubID");
+  const nameCol = headers.indexOf("SubName");
+  const addressCol = headers.indexOf("Address");
+  const cityCol = headers.indexOf("City");
+  const stateCol = headers.indexOf("State");
+  const zipCol = headers.indexOf("Zip");
+  const emailCol = headers.indexOf("ContactEmail");
+  const phoneCol = headers.indexOf("Phone");
+  
+  const rowIndex = values.findIndex(row => row[subIdCol] === subId);
+  if (rowIndex === -1) throw new Error("Subcontractor not found");
+  
+  if (data.subName) sheet.getRange(rowIndex + 1, nameCol + 1).setValue(data.subName);
+  if (data.address) sheet.getRange(rowIndex + 1, addressCol + 1).setValue(data.address);
+  if (data.city) sheet.getRange(rowIndex + 1, cityCol + 1).setValue(data.city);
+  if (data.state) sheet.getRange(rowIndex + 1, stateCol + 1).setValue(data.state);
+  if (data.zip) sheet.getRange(rowIndex + 1, zipCol + 1).setValue(data.zip);
+  if (data.contactEmail) sheet.getRange(rowIndex + 1, emailCol + 1).setValue(data.contactEmail);
+  if (data.phone) sheet.getRange(rowIndex + 1, phoneCol + 1).setValue(data.phone);
+  
+  return { success: true };
+}
+
+function updateVendorData(vendorId, data) {
+  const sheet = getSheet(CONFIG.SHEETS.VENDORS);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  
+  const vendorIdCol = headers.indexOf("VendorID");
+  const nameCol = headers.indexOf("VendorName");
+  const addressCol = headers.indexOf("Address");
+  const cityCol = headers.indexOf("City");
+  const stateCol = headers.indexOf("State");
+  const zipCol = headers.indexOf("Zip");
+  const emailCol = headers.indexOf("Email");
+  const phoneCol = headers.indexOf("Phone");
+  
+  const rowIndex = values.findIndex(row => row[vendorIdCol] === vendorId);
+  if (rowIndex === -1) throw new Error("Vendor not found");
+  
+  if (data.vendorName) sheet.getRange(rowIndex + 1, nameCol + 1).setValue(data.vendorName);
+  if (data.address) sheet.getRange(rowIndex + 1, addressCol + 1).setValue(data.address);
+  if (data.city) sheet.getRange(rowIndex + 1, cityCol + 1).setValue(data.city);
+  if (data.state) sheet.getRange(rowIndex + 1, stateCol + 1).setValue(data.state);
+  if (data.zip) sheet.getRange(rowIndex + 1, zipCol + 1).setValue(data.zip);
+  if (data.email) sheet.getRange(rowIndex + 1, emailCol + 1).setValue(data.email);
+  if (data.phone) sheet.getRange(rowIndex + 1, phoneCol + 1).setValue(data.phone);
+  
+  return { success: true };
 }
 
 

@@ -18,6 +18,19 @@
   <!-- Load Tailwind after React -->
   <script src="https://cdn.tailwindcss.com"></script>
 
+  <!-- Load client constants before components -->
+  <script>
+    // Load constants from server
+    google.script.run
+      .withSuccessHandler(function(constants) {
+        // Expose constants globally
+        window.PROJECT_STATUSES = constants.PROJECT_STATUSES;
+        window.ESTIMATE_STATUSES = constants.ESTIMATE_STATUSES;
+        window.STATUS_TRANSITIONS = constants.STATUS_TRANSITIONS;
+      })
+      .getClientConstants();
+  </script>
+
   <!-- Global styles before components -->
   <script>
     window.appStyles = {
