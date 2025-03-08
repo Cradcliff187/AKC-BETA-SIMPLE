@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+<script>
+(function() {
+  // Shared UI Components
+  var SharedUI = {
+    // Mobile-friendly container
+    Container: function(props) {
+      return React.createElement('div', {
+        className: 'w-full mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl transition-all duration-200'
+      }, props.children);
+    },
+
+    // Responsive Card
+    Card: function(props) {
+      var title = props.title;
+      var subtitle = props.subtitle;
+      var onClick = props.onClick;
+      var children = props.children;
+      var className = props.className || '';
+
+      return React.createElement('div', {
+        onClick: onClick,
+        className: [
+          'bg-white',
+          'rounded-lg',
+          'shadow-sm',
+          'p-4',
+          'sm:p-6',
+          onClick ? 'cursor-pointer active:bg-gray-50 transform active:scale-[0.98] transition-all duration-150' : '',
+          className
+        ].join(' ')
+      }, [
+        title && React.createElement('h3', {
+          key: 'title',
+          className: 'text-lg font-semibold mb-1'
+        }, title),
+        subtitle && React.createElement('p', {
+          key: 'subtitle',
+          className: 'text-sm text-gray-600 mb-3'
+        }, subtitle),
+        children
+      ].filter(Boolean));
+    },
+
+    // Form Input
+    Input: function(props) {
+      var label = props.label;
+      var value = props.value;
+      var onChange = props.onChange;
+      var type = props.type || 'text';
+      var required = props.required || false;
+      var error = props.error || null;
+
+      return React.createElement('div', {
+        className: 'mb-4'
+      }, [
+        React.createElement('label', {
+          key: 'label',
+          className: 'text-sm font-medium text-gray-700 mb-2 block'
+        }, [
+          label,
+          required && React.createElement('span', { 
+            key: 'required',
+            className: 'text-red-500 ml-1' 
+          }, '*')
+        ].filter(Boolean)),
+        React.createElement('input', {
+          key: 'input',
+          type: type,
+          value: value,
+          onChange: onChange,
+          required: required,
+          className: [
+            'w-full',
+            'h-12',
+            'px-4',
+            'rounded-lg',
+            'border',
+            error ? 'border-red-500' : 'border-gray-300',
+            'focus:ring-2',
+            'focus:ring-blue-500',
+            'text-base'
+          ].join(' ')
+        }),
+        error && React.createElement('p', {
+          key: 'error',
+          className: 'text-red-500 text-sm mt-1'
+        }, error)
+      ].filter(Boolean));
+    },
+
+    // Dropdown/Select Component
+    Select: function(props) {
+      var label = props.label;
+      var value = props.value;
+      var onChange = props.onChange;
+      var options = props.options || [];
+      var placeholder = props.placeholder || 'Select an option';
+      var required = props.required || false;
+      var error = props.error || null;
+      
+      return React.createElement('div', {
+        className: 'mb-4'
+      }, [
+        React.createElement('label', {
+          key: 'label',
+          className: 'text-sm font-medium text-gray-700 mb-2 block'
+        }, [
+          label,
+          required && React.createElement('span', { 
+            key: 'required',
+            className: 'text-red-500 ml-1' 
+          }, '*')
+        ].filter(Boolean)),
+        React.createElement('select', {
+          key: 'select',
+          value: value,
+          onChange: onChange,
+          required: required,
+          className: [
+            'w-full',
+            'h-12',
+            'px-4',
+            'rounded-lg',
+            'border',
+            error ? 'border-red-500' : 'border-gray-300',
+            'focus:ring-2',
+            'focus:ring-blue-500',
+            'text-base',
+            'bg-white'
+          ].join(' ')
+        }, [
+          React.createElement('option', { 
+            key: 'placeholder',
+            value: '',
+            disabled: true
+          }, placeholder),
+          options.map(function(option, index) {
+            // Handle both simple arrays and arrays of objects
+            var optionValue = typeof option === 'object' ? option.value : option;
+            var optionLabel = typeof option === 'object' ? option.label : option;
+            
+            return React.createElement('option', {
+              key: index,
+              value: optionValue
+            }, optionLabel);
+          })
+        ]),
+        error && React.createElement('p', {
+          key: 'error',
+          className: 'text-red-500 text-sm mt-1'
+        }, error)
+      ].filter(Boolean));
+    },
+
+    // File Upload Component
+    FileUpload: function(props) {
+      var label = props.label;
+      var onChange = props.onChange;
+      var accept = props.accept || 'image/*';
+      var required = props.required || false;
+      var error = props.error || null;
+      var preview = props.preview;
+      
+      return React.createElement('div', {
+        className: 'mb-4'
+      }, [
+        React.createElement('label', {
+          key: 'label',
+          className: 'text-sm font-medium text-gray-700 mb-2 block'
+        }, [
+          label,
+          required && React.createElement('span', { 
+            key: 'required',
+            className: 'text-red-500 ml-1' 
+          }, '*')
+        ].filter(Boolean)),
+        
+        // File input with custom styling
+        React.createElement('div', {
+          key: 'file-input-container',
+          className: 'relative'
+        }, [
+          React.createElement('input', {
+            key: 'file-input',
+            type: 'file',
+            onChange: onChange,
+            accept: accept,
+            required: required,
+            className: 'absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10'
+          }),
+          React.createElement('div', {
+            key: 'custom-button',
+            className: [
+              'w-full',
+              'h-12',
+              'px-4',
+              'rounded-lg',
+              'border',
+              error ? 'border-red-500' : 'border-gray-300',
+              'flex',
+              'items-center',
+              'justify-center',
+              'bg-gray-50',
+              'hover:bg-gray-100',
+              'text-gray-700'
+            ].join(' ')
+          }, [
+            React.createElement('svg', {
+              key: 'upload-icon',
+              xmlns: 'http://www.w3.org/2000/svg',
+              className: 'h-5 w-5 mr-2',
+              viewBox: '0 0 20 20',
+              fill: 'currentColor'
+            }, 
+              React.createElement('path', {
+                fillRule: 'evenodd',
+                d: 'M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z',
+                clipRule: 'evenodd'
+              })
+            ),
+            'Choose a file'
+          ])
+        ]),
+        
+        // Preview section (if provided)
+        preview && React.createElement('div', {
+          key: 'preview',
+          className: 'mt-2'
+        }, [
+          React.createElement('img', {
+            key: 'preview-image',
+            src: preview,
+            alt: 'Preview',
+            className: 'h-32 object-contain rounded border'
+          })
+        ]),
+        
+        error && React.createElement('p', {
+          key: 'error',
+          className: 'text-red-500 text-sm mt-1'
+        }, error)
+      ].filter(Boolean));
+    },
+
+    // Button
+    Button: function(props) {
+      var text = props.text;
+      var onClick = props.onClick;
+      var variant = props.variant || 'primary';
+      var type = props.type || 'button';
+      var disabled = props.disabled || false;
+      var className = props.className || '';
+
+      var variants = {
+        primary: 'bg-blue-600 text-white hover:bg-blue-700',
+        secondary: 'bg-gray-200 text-gray-800 hover:bg-gray-300',
+        danger: 'bg-red-600 text-white hover:bg-red-700'
+      };
+
+      return React.createElement('button', {
+        type: type,
+        onClick: onClick,
+        disabled: disabled,
+        className: [
+          'w-full',
+          'h-12',
+          'px-4',
+          'rounded-lg',
+          'font-medium',
+          'transition-colors',
+          'duration-150',
+          variants[variant],
+          disabled ? 'opacity-50 cursor-not-allowed' : '',
+          className
+        ].join(' ')
+      }, text);
+    },
+
+    // Loading Overlay
+    LoadingOverlay: function(props) {
+      var message = props.message || 'Loading...';
+
+      return React.createElement('div', {
+        className: 'fixed inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50'
+      }, 
+        React.createElement('div', {
+          className: 'text-center'
+        }, [
+          React.createElement('div', {
+            key: 'spinner',
+            className: 'animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4'
+          }),
+          React.createElement('p', {
+            key: 'message',
+            className: 'text-gray-700'
+          }, message)
+        ])
+      );
+    },
+
+    // Bottom Sheet Modal
+    BottomSheet: function(props) {
+      var isOpen = props.isOpen;
+      var onClose = props.onClose;
+      var title = props.title;
+      var children = props.children;
+
+      if (!isOpen) return null;
+
+      return React.createElement('div', {
+        className: 'fixed inset-0 z-50'
+      }, [
+        // Backdrop
+        React.createElement('div', {
+          key: 'backdrop',
+          onClick: onClose,
+          className: 'absolute inset-0 bg-black bg-opacity-25 transition-opacity'
+        }),
+        // Sheet
+        React.createElement('div', {
+          key: 'sheet',
+          className: [
+            'absolute',
+            'bottom-0',
+            'left-0',
+            'right-0',
+            'bg-white',
+            'rounded-t-2xl',
+            'p-6',
+            'transform',
+            'transition-transform',
+            'max-h-[90vh]',
+            'overflow-y-auto'
+          ].join(' ')
+        }, [
+          React.createElement('div', {
+            key: 'header',
+            className: 'flex justify-between items-center mb-4'
+          }, [
+            React.createElement('h3', {
+              key: 'title',
+              className: 'text-lg font-semibold'
+            }, title),
+            React.createElement('button', {
+              key: 'close',
+              onClick: onClose,
+              className: 'text-gray-500 hover:text-gray-700'
+            }, '×')
+          ]),
+          children
+        ])
+      ]);
+    }
+  };
+
+  // Expose to global scope for use in other files
+  window.SharedUI = SharedUI;
+})();
+</script> 

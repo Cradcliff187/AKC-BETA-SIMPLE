@@ -1,373 +1,360 @@
+<?!= include('SharedComponents'); ?>
+
 <script>
-const TimeLogger = () => {
-  const [date, setDate] = React.useState(''); // Changed from undefined default
-  const [startTime, setStartTime] = React.useState('');
-  const [endTime, setEndTime] = React.useState('');
-  const [projects, setProjects] = React.useState([]);
-  const [selectedProject, setSelectedProject] = React.useState('');
-  const [forUserEmail, setForUserEmail] = React.useState('');
-  const [message, setMessage] = React.useState({ text: '', type: '' });
-  const [loading, setLoading] = React.useState(false);
-  const [hours, setHours] = React.useState(0);
-  const mountedRef = React.useRef(true);
-  const [showProjectConfirmation, setShowProjectConfirmation] = React.useState(false);
-  const [projectConfirmed, setProjectConfirmed] = React.useState(false);
+(function() {
+  // Time Logger Component
+  function TimeLoggerComponent() {
+    var useState = React.useState;
+    var useEffect = React.useEffect;
+    
+    var entriesState = useState([]);
+    var entries = entriesState[0];
+    var setEntries = entriesState[1];
+    
+    var loadingState = useState(true);
+    var loading = loadingState[0];
+    var setLoading = loadingState[1];
+    
+    var errorState = useState(null);
+    var error = errorState[0];
+    var setError = errorState[1];
+    
+    var showFormState = useState(false);
+    var showForm = showFormState[0];
+    var setShowForm = showFormState[1];
+    
+    var selectedEntryState = useState(null);
+    var selectedEntry = selectedEntryState[0];
+    var setSelectedEntry = selectedEntryState[1];
+    
+    var formDataState = useState({
+      date: new Date().toISOString().split('T')[0],
+      projectId: '',
+      hours: '',
+      description: '',
+      type: 'regular' // regular, overtime, travel
+    });
+    var formData = formDataState[0];
+    var setFormData = formDataState[1];
 
-  React.useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
+    // Load time entries on mount
+    useEffect(function() {
+      loadEntries();
+    }, []);
 
-  // Update date initialization
-  React.useEffect(() => {
-    const initDate = async () => {
-      try {
-        const today = await new Promise(resolve => {
-          google.script.run
-            .withSuccessHandler(resolve)
-            .withFailureHandler(() => resolve(new Date().toISOString().split('T')[0]))
-            .getTodayDate();
-        });
-        if (mountedRef.current) {
-          setDate(today);
-        }
-      } catch (error) {
-        console.error('Error getting date:', error);
-        if (mountedRef.current) {
-          setDate(new Date().toISOString().split('T')[0]);
-        }
-      }
-    };
-    initDate();
-  }, []);
-
-  // Update projects fetch with better error handling
-  React.useEffect(() => {
-    const fetchProjects = async () => {
-      if (!mountedRef.current) return;
-      try {
-        console.log('Fetching projects...');
-        const response = await new Promise((resolve, reject) => {
-          google.script.run
-            .withSuccessHandler(result => {
-              console.log('Raw server response:', result);
-              if (!result) {
-                reject(new Error('Server returned null response'));
-                return;
-              }
-              resolve(result);
-            })
-            .withFailureHandler(err => {
-              console.error('Server error:', err);
-              reject(new Error(err.message || 'Failed to fetch projects'));
-            })
-            .getProjects();
-        });
-
-        if (!mountedRef.current) return;
-
-        if (response && response.success && Array.isArray(response.data)) {
-          console.log(`Setting ${response.data.length} projects`);
-          setProjects(response.data);
-          // Show message if no projects found
-          if (response.data.length === 0) {
-            showMessage('No active projects available', 'info');
-          }
-        } else {
-          const errorMsg = (response && response.error) || 'Invalid server response';
-          console.error('Invalid projects response:', errorMsg);
-          showMessage(errorMsg, 'error');
-        }
-      } catch (error) {
-        console.error('Error in fetchProjects:', error);
-        if (mountedRef.current) {
-          showMessage(error.message || 'Failed to load projects', 'error');
-        }
-      }
-    };
-
-    fetchProjects();
-  }, []);
-
-  // Calculate hours whenever date, startTime, or endTime changes
-  React.useEffect(() => {
-    if (startTime && endTime) {
-      const start = new Date(`${date} ${startTime}`);
-      const end = new Date(`${date} ${endTime}`);
-      const diff = (end - start) / (1000 * 60 * 60);
-      if (mountedRef.current) {
-        setHours(diff > 0 ? diff : 0);
-      }
-    }
-  }, [date, startTime, endTime]);
-
-  const showMessage = (text, type) => {
-    if (!mountedRef.current) return;
-    setMessage({ text, type });
-  };
-
-  const resetForm = () => {
-    if (!mountedRef.current) return;
-    google.script.run
-      .withSuccessHandler(newDate => {
-        if (mountedRef.current) {
-          setDate(newDate);
-          setStartTime('');
-          setEndTime('');
-          setSelectedProject('');
-          setForUserEmail('');
-          setMessage({ text: '', type: '' });
-          setHours(0);
-          // Add these two lines to reset confirmation state
-          setShowProjectConfirmation(false);
-          setProjectConfirmed(false);
-        }
-      })
-      .getTodayDate();
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!mountedRef.current) return;
-
-    if (!projectConfirmed) {
-      showMessage('Please confirm project details before submitting', 'error');
-      return;
+    function loadEntries() {
+      setLoading(true);
+      google.script.run
+        .withSuccessHandler(handleEntriesLoaded)
+        .withFailureHandler(handleError)
+        .getTimeEntries();
     }
 
-    setLoading(true);
-    try {
-      const response = await new Promise(resolve => {
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(err => resolve({ success: false, error: err.message }))
-          .submitTimeLog({
-            date,
-            startTime,
-            endTime,
-            projectId: selectedProject,
-            forUserEmail // pass new field
+    function handleEntriesLoaded(result) {
+      setEntries(result || []);
+      setLoading(false);
+    }
+
+    function handleError(error) {
+      setError(error.message || 'An error occurred');
+      setLoading(false);
+    }
+
+    function handleSubmit(e) {
+      e.preventDefault();
+      setLoading(true);
+
+      var entryData = selectedEntry 
+        ? Object.assign({}, formData, { id: selectedEntry.id })
+        : formData;
+
+      google.script.run
+        .withSuccessHandler(function() {
+          loadEntries();
+          setShowForm(false);
+          setSelectedEntry(null);
+          setFormData({
+            date: new Date().toISOString().split('T')[0],
+            projectId: '',
+            hours: '',
+            description: '',
+            type: 'regular'
           });
-      });
-      if (!mountedRef.current) return;
-      if (response.success) {
-        showMessage(
-          `Time logged successfully! ${response.data.hours.toFixed(2)} hours recorded.`,
-          'success'
-        );
-        setTimeout(() => {
-          if (mountedRef.current) resetForm();
-        }, 2000);
-      } else {
-        showMessage(response.error || 'Failed to log time', 'error');
-      }
-    } catch (error) {
-      if (mountedRef.current) {
-        showMessage('Failed to log time', 'error');
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
+        })
+        .withFailureHandler(handleError)
+        [selectedEntry ? 'updateTimeEntry' : 'createTimeEntry'](entryData);
     }
-  };
 
-  const generateTimeOptions = () => {
-    const options = [];
-    for (let hour = 0; hour < 24; hour++) {
-      for (let minute = 0; minute < 60; minute += 15) {
-        const hourStr = hour.toString().padStart(2, '0');
-        const minStr = minute.toString().padStart(2, '0');
-        const time = `${hourStr}:${minStr}`;
-        const label = new Date(`2000-01-01 ${time}`).toLocaleTimeString([], {
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true
-        });
-        options.push(React.createElement('option', { key: time, value: time }, label));
-      }
+    function handleEdit(entry) {
+      setSelectedEntry(entry);
+      setFormData(Object.assign({}, entry, {
+        date: entry.date.split('T')[0] // Format date for input
+      }));
+      setShowForm(true);
     }
-    return options;
-  };
 
-  const handleProjectSelect = (projectId) => {
-    setSelectedProject(projectId);
-    setShowProjectConfirmation(true);
-    setProjectConfirmed(false);
-  };
+    function handleDelete(entryId) {
+      if (!confirm('Are you sure you want to delete this time entry?')) return;
+      
+      setLoading(true);
+      google.script.run
+        .withSuccessHandler(loadEntries)
+        .withFailureHandler(handleError)
+        .deleteTimeEntry(entryId);
+    }
 
-  const handleProjectConfirm = () => {
-    setShowProjectConfirmation(false);
-    setProjectConfirmed(true);
-  };
-
-  return React.createElement('div', { className: 'max-w-2xl mx-auto p-4' },
-    React.createElement('div', { className: 'bg-white shadow rounded-lg p-6' },
-      React.createElement('h2', { className: 'text-2xl font-bold mb-4' }, 'Log Time'),
-
-      message.text && React.createElement('div', {
-        className: `mb-4 p-4 rounded ${
-          message.type === 'success'
-            ? 'bg-green-100 text-green-700'
-            : 'bg-red-100 text-red-700'
-        }`
-      }, message.text),
-
-      React.createElement('form', { onSubmit: handleSubmit, className: 'space-y-4' },
-        // Date
-        React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Date:'),
-          React.createElement('input', {
-            type: 'date',
-            value: date,
-            onChange: e => setDate(e.target.value),
-            className: 'w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500',
-            required: true
-          })
-        ),
-        // Start / End
-        React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
-          // Start
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Start Time:'),
-            React.createElement('select', {
-              value: startTime,
-              onChange: e => setStartTime(e.target.value),
-              className: 'w-full p-2 border rounded',
-              required: true
-            },
-              React.createElement('option', { value: '' }, 'Select Time'),
-              generateTimeOptions()
-            )
-          ),
-          // End
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'End Time:'),
-            React.createElement('select', {
-              value: endTime,
-              onChange: e => setEndTime(e.target.value),
-              className: 'w-full p-2 border rounded',
-              required: true
-            },
-              React.createElement('option', { value: '' }, 'Select Time'),
-              generateTimeOptions()
-            )
-          )
-        ),
-        React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Project:'),
-          React.createElement('select', {
-            value: selectedProject || '', // Use just the ID
-            onChange: e => handleProjectSelect(e.target.value),
-            className: 'w-full p-2 border rounded',
-            required: true
+    // Time Entry Form Component
+    function TimeEntryForm() {
+      return React.createElement('form', {
+        onSubmit: handleSubmit,
+        className: 'space-y-4'
+      }, [
+        React.createElement(SharedUI.Input, {
+          key: 'date-input',
+          label: 'Date',
+          type: 'date',
+          value: formData.date,
+          onChange: function(e) {
+            setFormData(function(prev) {
+              return Object.assign({}, prev, { date: e.target.value });
+            });
           },
-            React.createElement('option', { value: '' }, 'Select Project'),
-            projects.map(project =>
-              React.createElement('option', {
-                key: project.id,
-                value: project.id
-              }, 
-                `${project.projectId} - ${project.name}`  // Simplified format
-              )
-            )
-          ),
-          // Show ProjectDetailsConfirmation when not confirmed
-          showProjectConfirmation && selectedProject && 
-            React.createElement(ProjectDetailsConfirmation, {
-              project: projects.find(p => p.id === selectedProject),
-              onConfirm: handleProjectConfirm
-            }),
-          // Show simple confirmation message when confirmed
-          projectConfirmed && React.createElement('div', {
-            className: 'mt-2 text-green-600 text-sm flex items-center'
-          }, 
-            '✓ Project details confirmed ',
-            // Add a "View Details" button
-            React.createElement('button', {
-              type: 'button',
-              onClick: () => setShowProjectConfirmation(true),
-              className: 'ml-2 text-blue-600 hover:text-blue-800 text-sm underline'
-            }, '(View Details)')
-          )
-        ),
-        // ForUserEmail
-        React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'For Which Employee Email (optional):'),
-          React.createElement('input', {
-            type: 'email',
-            placeholder: 'If blank, logs for yourself',
-            value: forUserEmail,
-            onChange: e => setForUserEmail(e.target.value),
-            className: 'w-full p-2 border rounded'
+          required: true
+        }),
+        React.createElement(SharedUI.Input, {
+          key: 'project-input',
+          label: 'Project ID',
+          value: formData.projectId,
+          onChange: function(e) {
+            setFormData(function(prev) {
+              return Object.assign({}, prev, { projectId: e.target.value });
+            });
+          },
+          required: true
+        }),
+        React.createElement(SharedUI.Input, {
+          key: 'description-input',
+          label: 'Description',
+          value: formData.description,
+          onChange: function(e) {
+            setFormData(function(prev) {
+              return Object.assign({}, prev, { description: e.target.value });
+            });
+          },
+          required: true
+        }),
+        React.createElement(SharedUI.Input, {
+          key: 'hours-input',
+          label: 'Hours',
+          type: 'number',
+          step: '0.25',
+          min: '0',
+          value: formData.hours,
+          onChange: function(e) {
+            setFormData(function(prev) {
+              return Object.assign({}, prev, { hours: e.target.value });
+            });
+          },
+          required: true
+        }),
+        React.createElement('div', {
+          key: 'type-container',
+          className: 'space-y-2'
+        }, [
+          React.createElement('label', {
+            key: 'type-label',
+            className: 'text-sm font-medium text-gray-700'
+          }, 'Type'),
+          React.createElement('div', {
+            key: 'type-buttons',
+            className: 'grid grid-cols-3 gap-2'
+          }, [
+            ['regular', 'overtime', 'travel'].map(function(type) {
+              return React.createElement('button', {
+                type: 'button',
+                key: type,
+                onClick: function() {
+                  setFormData(function(prev) {
+                    return Object.assign({}, prev, { type: type });
+                  });
+                },
+                className: [
+                  'p-2',
+                  'rounded-lg',
+                  'text-sm',
+                  'font-medium',
+                  formData.type === type 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ].join(' ')
+              }, type.charAt(0).toUpperCase() + type.slice(1));
+            })
+          ])
+        ]),
+        React.createElement('div', {
+          key: 'buttons-container',
+          className: 'flex flex-col sm:flex-row gap-4'
+        }, [
+          React.createElement(SharedUI.Button, {
+            key: 'submit-button',
+            text: selectedEntry ? 'Update Entry' : 'Add Entry',
+            type: 'submit'
+          }),
+          React.createElement(SharedUI.Button, {
+            key: 'cancel-button',
+            text: 'Cancel',
+            variant: 'secondary',
+            onClick: function() {
+              setShowForm(false);
+              setSelectedEntry(null);
+            }
           })
-        ),
-        // Submit
-        React.createElement('button', {
-          type: 'submit',
-          disabled: loading,
-          className: `w-full p-3 rounded text-white font-medium ${
-            loading ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
-          }`
-        }, loading ? 'Logging...' : hours > 0 ? `Log Time (${hours.toFixed(2)} hrs)` : 'Log Time')
-      )
-    )
-  );
-};
+        ])
+      ]);
+    }
 
-const ProjectDetailsConfirmation = ({ project, onConfirm }) => {
-  if (!project) return null;
+    // Time Entries List Component
+    function TimeEntriesList() {
+      if (!entries.length) {
+        return React.createElement(SharedUI.Card, {
+          className: 'text-center py-8'
+        }, [
+          React.createElement('p', {
+            key: 'no-entries-text',
+            className: 'text-gray-500'
+          }, 'No time entries found'),
+          React.createElement(SharedUI.Button, {
+            key: 'add-button',
+            text: 'Add Time Entry',
+            onClick: function() { setShowForm(true); },
+            className: 'mt-4 max-w-xs mx-auto'
+          })
+        ]);
+      }
 
-  // Create a properly formatted site location object from direct fields
-  const siteLocation = {
-    address: project.siteLocationAddress || '',
-    city: project.siteLocationCity || '',
-    state: project.siteLocationState || '',
-    zip: project.siteLocationZip || ''
-  };
+      // Group entries by date
+      var groupedEntries = entries.reduce(function(groups, entry) {
+        var date = entry.date.split('T')[0];
+        if (!groups[date]) {
+          groups[date] = [];
+        }
+        groups[date].push(entry);
+        return groups;
+      }, {});
 
-  // Check if there's any site location data
-  const hasSiteLocation = siteLocation.address || siteLocation.city || siteLocation.state || siteLocation.zip;
+      return React.createElement('div', {
+        className: 'space-y-6'
+      }, [
+        React.createElement(SharedUI.Button, {
+          key: 'add-new-button',
+          text: 'Add New Time Entry',
+          onClick: function() { setShowForm(true); },
+          className: 'mb-6'
+        }),
+        Object.keys(groupedEntries).map(function(date) {
+          var dayEntries = groupedEntries[date];
+          return React.createElement('div', {
+            key: date,
+            className: 'space-y-2'
+          }, [
+            React.createElement('h3', {
+              key: 'date-header',
+              className: 'text-sm font-medium text-gray-500'
+            }, new Date(date).toLocaleDateString('en-US', { 
+              weekday: 'long', 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric' 
+            })),
+            dayEntries.map(function(entry) {
+              return React.createElement(SharedUI.Card, {
+                key: entry.id || `entry-${Math.random().toString(36).substr(2, 9)}`,
+                className: 'hover:shadow-md transition-shadow duration-200'
+              }, [
+                React.createElement('div', {
+                  key: 'entry-content',
+                  className: 'flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4'
+                }, [
+                  React.createElement('div', {
+                    key: 'entry-info',
+                    className: 'flex-1'
+                  }, [
+                    React.createElement('div', {
+                      key: 'entry-hours',
+                      className: 'flex items-center gap-2'
+                    }, [
+                      React.createElement('span', {
+                        key: 'hours-text',
+                        className: 'text-lg font-semibold'
+                      }, entry.hours + ' hr' + (entry.hours !== '1' ? 's' : '')),
+                      React.createElement('span', {
+                        key: 'type-badge',
+                        className: [
+                          'px-2',
+                          'py-1',
+                          'text-xs',
+                          'rounded-full',
+                          entry.type === 'regular'
+                            ? 'bg-blue-100 text-blue-800'
+                            : entry.type === 'overtime'
+                            ? 'bg-orange-100 text-orange-800'
+                            : 'bg-green-100 text-green-800'
+                        ].join(' ')
+                      }, entry.type)
+                    ]),
+                    React.createElement('p', {
+                      key: 'description-text',
+                      className: 'text-sm text-gray-600'
+                    }, entry.description)
+                  ]),
+                  React.createElement('div', {
+                    key: 'entry-actions',
+                    className: 'flex gap-2'
+                  }, [
+                    React.createElement(SharedUI.Button, {
+                      key: 'edit-button',
+                      text: 'Edit',
+                      variant: 'secondary',
+                      onClick: function() { handleEdit(entry); }
+                    }),
+                    React.createElement(SharedUI.Button, {
+                      key: 'delete-button',
+                      text: 'Delete',
+                      variant: 'danger',
+                      onClick: function() { handleDelete(entry.id); }
+                    })
+                  ])
+                ])
+              ]);
+            })
+          ]);
+        })
+      ]);
+    }
 
-  return React.createElement('div', {
-    className: 'mt-4 p-4 bg-gray-50 border rounded-lg shadow-sm'
-  },
-    React.createElement('h4', { 
-      className: 'text-lg font-medium mb-3 text-gray-700' 
-    }, 'Please Confirm Project Details:'),
-    
-    React.createElement('div', { className: 'space-y-2 mb-4' },
-      React.createElement('div', null,
-        React.createElement('span', { className: 'font-medium' }, 'Customer: '),
-        React.createElement('span', null, project.customerName || 'N/A')
-      ),
-      React.createElement('div', null,
-        React.createElement('span', { className: 'font-medium' }, 'Job Description: '),
-        React.createElement('span', null, project.jobDescription || 'N/A')
-      ),
-      React.createElement('div', null,
-        React.createElement('span', { className: 'font-medium' }, 'Site Location: '),
-        React.createElement('div', { className: 'pl-4 text-gray-600' },
-          hasSiteLocation ? [
-            siteLocation.address && React.createElement('div', { key: 'address' }, siteLocation.address),
-            React.createElement('div', { key: 'citystatezip' }, 
-              [siteLocation.city, siteLocation.state, siteLocation.zip]
-                .filter(Boolean)
-                .join(', ')
-            )
-          ] : React.createElement('div', null, 'No site location provided')
-        )
-      )
-    ),
-    
-    React.createElement('button', {
-      type: 'button',
-      onClick: onConfirm,
-      className: 'w-full p-2 bg-green-600 text-white rounded hover:bg-green-700'
-    }, 'Confirm Project Details ✓')
-  );
-};
+    // Main render
+    return React.createElement('div', { className: 'space-y-6' }, [
+      React.createElement('h2', { 
+        key: 'title',
+        className: 'text-2xl font-bold' 
+      }, 'Time Logger'),
+      
+      error && React.createElement('div', {
+        key: 'error',
+        className: 'bg-red-100 text-red-700 p-4 rounded-lg'
+      }, error),
+      
+      loading && React.createElement(SharedUI.LoadingOverlay, {
+        key: 'loading'
+      }),
+      
+      showForm 
+        ? React.createElement(TimeEntryForm, { key: 'form' })
+        : React.createElement(TimeEntriesList, { key: 'list' })
+    ].filter(Boolean));
+  }
 
-// Expose to window - ensure proper loading in Index.html
-window.TimeLogger = TimeLogger;
+  // Expose the component to the global scope
+  window.TimeLoggerComponent = TimeLoggerComponent;
+})();
 </script>

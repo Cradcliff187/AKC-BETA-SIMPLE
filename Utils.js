@@ -113,39 +113,6 @@ function getTodayDate() {
   return Utilities.formatDate(today, Session.getScriptTimeZone(), "yyyy-MM-dd");
 }
 
-function validateStatusTransition(oldStatus, newStatus, type) {
-  Logger.log(`Validating transition: ${type} ${oldStatus} -> ${newStatus}`);
-  
-  const transitions = STATUS_TRANSITIONS[type];
-  if (!transitions) {
-    throw new Error(`Invalid status type: ${type}`);
-  }
-
-  // Handle empty/null old status (treat as initial state)
-  if (!oldStatus) {
-    // For new records, allow setting to initial states
-    const validInitialStates = type === 'PROJECT' ? 
-      [PROJECT_STATUSES.PENDING] : 
-      [ESTIMATE_STATUSES.DRAFT];
-      
-    if (!validInitialStates.includes(newStatus)) {
-      throw new Error(`Invalid initial status: ${newStatus}`);
-    }
-    return true;
-  }
-
-  const allowedTransitions = transitions[oldStatus];
-  if (!allowedTransitions) {
-    throw new Error(`Invalid current status: ${oldStatus}`);
-  }
-
-  if (!allowedTransitions.includes(newStatus)) {
-    throw new Error(`Invalid status transition from ${oldStatus} to ${newStatus}`);
-  }
-
-  return true;
-}
-
 /**
  * Formats a phone number to (XXX) XXX-XXXX pattern
  * @param {string} phone - Raw phone number input

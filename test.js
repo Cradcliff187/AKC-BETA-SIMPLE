@@ -1,4 +1,3 @@
-
 function testDashboardSetup() {
   Logger.log('=== Testing Dashboard Setup ===');
   
@@ -10,15 +9,29 @@ function testDashboardSetup() {
     projects: CONFIG.SHEETS.PROJECTS
   };
 
-  Logger.log('Testing sheet access:');
+  Logger.log('Testing sheet access and headers:');
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+
   Object.entries(sheets).forEach(([name, sheetName]) => {
     try {
-      const sheet = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(sheetName);
-      Logger.log(`- ${name}: ${sheet ? 'OK' : 'NOT FOUND'}`);
-      if (sheet) {
-        Logger.log(`  Headers: ${sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].join(', ')}`);
+      const sheet = ss.getSheetByName(sheetName);
+      if (!sheet) {
+        Logger.log(`- ${name}: NOT FOUND`);
+        return;
       }
-    } catch(e) {
+
+      const lastColumn = sheet.getLastColumn();
+      const lastRow = sheet.getLastRow();
+      
+      if (lastColumn > 0 && lastRow > 0) {
+        const headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
+        Logger.log(`- ${name} (${sheetName}): OK`);
+        Logger.log(`  Headers: [${headers.join(', ')}]`);
+      } else {
+        Logger.log(`- ${name} (${sheetName}): OK (No headers found)`);
+      }
+
+    } catch (e) {
       Logger.log(`- ${name}: ERROR - ${e.message}`);
     }
   });
@@ -29,7 +42,7 @@ function testDashboardSetup() {
     const analytics = getDashboardAnalytics();
     Logger.log('Dashboard Analytics Result:');
     Logger.log(JSON.stringify(analytics, null, 2));
-  } catch(e) {
+  } catch (e) {
     Logger.log(`Error getting analytics: ${e.message}`);
   }
 
@@ -47,7 +60,7 @@ function testDashboardSetup() {
       if (result.data && result.data.length > 0) {
         Logger.log(`- Sample record: ${JSON.stringify(result.data[0])}`);
       }
-    } catch(e) {
+    } catch (e) {
       Logger.log(`- Error testing ${comp}: ${e.message}`);
     }
   });

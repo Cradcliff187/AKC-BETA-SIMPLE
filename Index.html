@@ -3,27 +3,24 @@
 <head>
   <base target="_top">
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>AKC LLC Management</title>
   
-  <!-- Load React and ReactDOM first with full URLs and integrity checks -->
-  <script 
-    src="https://unpkg.com/react@17.0.2/umd/react.development.js" 
-    crossorigin
-  ></script>
-  <script 
-    src="https://unpkg.com/react-dom@17.0.2/umd/react-dom.development.js" 
-    crossorigin
-  ></script>
+  <!-- Load React and ReactDOM first -->
+  <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
   
-  <!-- Load Tailwind after React -->
+  <!-- Load Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Load shared components first -->
+  <?!= include('SharedComponents'); ?>
 
   <!-- Load client constants before components -->
   <script>
     // Load constants from server
     google.script.run
       .withSuccessHandler(function(constants) {
-        // Expose constants globally
         window.PROJECT_STATUSES = constants.PROJECT_STATUSES;
         window.ESTIMATE_STATUSES = constants.ESTIMATE_STATUSES;
         window.STATUS_TRANSITIONS = constants.STATUS_TRANSITIONS;
@@ -31,30 +28,7 @@
       .getClientConstants();
   </script>
 
-  <!-- Global styles before components -->
-  <script>
-    window.appStyles = {
-      container: 'max-w-2xl mx-auto p-4',
-      card: 'bg-white shadow rounded-lg p-6',
-      form: {
-        group: 'space-y-4',
-        label: 'block text-sm font-medium mb-1',
-        input: 'w-full p-2 border rounded',
-        select: 'w-full p-2 border rounded'
-      },
-      button: {
-        primary: 'w-full p-3 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400',
-        secondary: 'w-full p-3 border rounded hover:bg-gray-50'
-      },
-      message: {
-        success: 'mb-4 p-4 rounded bg-green-100 text-green-700',
-        error: 'mb-4 p-4 rounded bg-red-100 text-red-700',
-        info: 'mb-4 p-4 rounded bg-blue-100 text-blue-700'
-      }
-    };
-  </script>
-
-  <!-- Load components after React and styles are loaded -->
+  <!-- Load all other components -->
   <?!= include('CustomerManagement'); ?>
   <?!= include('VendorManagement'); ?>
   <?!= include('SubcontractorManagement'); ?>
@@ -62,195 +36,176 @@
   <?!= include('MaterialsReceipt'); ?>
   <?!= include('SubInvoice'); ?>
   <?!= include('EstimateCreator'); ?>
-  <?!= include('Dashboard'); ?>  <!-- Dashboard last since it depends on other components -->
+  <?!= include('Dashboard'); ?>
 </head>
 <body>
-  <div class="min-h-screen bg-gray-100">
-    <div class="container mx-auto px-4 py-6">
-      <!-- Updated Header with Logo -->
-      <div class="text-center mb-10">
-        <div class="flex justify-center items-center mb-6">
-          <img 
-            src="https://raw.githubusercontent.com/Cradcliff187/AKC-BETA-SIMPLE/64b7144f3996311782e32ad5ca6b162f6b734c99/AKC%20logo%20Only%20llc.jpg"
-            alt="AKC LLC Logo" 
-            class="h-20 sm:h-24 w-auto object-contain"
-          />
-        </div>
-        <div class="w-full h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
-      </div>
-
-      <!-- Main Navigation Grid -->
-      <div id="menuScreen" class="max-w-4xl mx-auto">
-        <h2 class="text-xl text-gray-600 text-center mb-8">Select an option below</h2>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-          <!-- Time Logger -->
-          <button 
-            id="timeLoggerBtn" 
-            class="p-6 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 text-center transform hover:-translate-y-1"
-          >
-            <div class="text-3xl text-blue-500 mb-3">⏱️</div>
-            <h2 class="text-lg font-semibold text-gray-800 mb-2">Log Time</h2>
-            <p class="text-sm text-gray-600">Record time spent on projects</p>
-          </button>
-
-          <!-- Materials Receipt -->
-          <button 
-            id="materialsReceiptBtn" 
-            class="p-6 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 text-center transform hover:-translate-y-1"
-          >
-            <div class="text-3xl text-green-500 mb-3">📝</div>
-            <h2 class="text-lg font-semibold text-gray-800 mb-2">Materials Receipt</h2>
-            <p class="text-sm text-gray-600">Submit materials and receipts</p>
-          </button>
-
-          <!-- Sub Invoice -->
-          <button 
-            id="subInvoiceBtn" 
-            class="p-6 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 text-center transform hover:-translate-y-1"
-          >
-            <div class="text-3xl text-purple-500 mb-3">🔧</div>
-            <h2 class="text-lg font-semibold text-gray-800 mb-2">Sub-Invoice</h2>
-            <p class="text-sm text-gray-600">Submit subcontractor invoices</p>
-          </button>
-
-          <!-- Estimate Creator -->
-          <button 
-            id="estimateCreatorBtn" 
-            class="p-6 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 text-center transform hover:-translate-y-1"
-          >
-            <div class="text-3xl text-orange-500 mb-3">📄</div>
-            <h2 class="text-lg font-semibold text-gray-800 mb-2">Create Estimate</h2>
-            <p class="text-sm text-gray-600">Generate new project estimates</p>
-          </button>
-
-          <!-- Replace CustomerManagement button with Dashboard -->
-          <button 
-            id="dashboardBtn" 
-            class="p-6 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 text-center transform hover:-translate-y-1"
-          >
-            <div class="text-3xl text-indigo-500 mb-3">📊</div>
-            <h2 class="text-lg font-semibold text-gray-800 mb-2">Business Management</h2>
-            <p class="text-sm text-gray-600">Manage customers, vendors & contractors</p>
-          </button>
-        </div>
-      </div>
-
-      <!-- React Root -->
-      <div id="root" class="hidden max-w-4xl mx-auto mt-6"></div>
-
-      <!-- Back Button -->
-      <div id="backBtn" class="mt-8 text-center hidden">
-        <button class="inline-flex items-center px-4 py-2 text-blue-600 hover:text-blue-800 transition-colors duration-200">
-          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-          </svg>
-          Back to Menu
-        </button>
-      </div>
-    </div>
+  <div id="app" class="min-h-screen bg-gray-50">
+    <!-- App content will be rendered here -->
   </div>
 
-  <!-- Main app script moved to end of body -->
   <script>
-    // Wait for DOM and React to be fully loaded
-    window.addEventListener('load', function() {
-      if (typeof React === 'undefined') {
-        console.error('React not loaded');
+    // Wait for SharedUI and React to be available before initializing the app
+    function initializeApp() {
+      if (!window.SharedUI || !window.React || !window.ReactDOM) {
+        console.log('Waiting for dependencies...', {
+          SharedUI: !!window.SharedUI,
+          React: !!window.React,
+          ReactDOM: !!window.ReactDOM
+        });
+        setTimeout(initializeApp, 100);
         return;
       }
-      if (typeof ReactDOM === 'undefined') {
-        console.error('ReactDOM not loaded');
-        return;
-      }
 
-      const App = () => {
-        const [currentPage, setCurrentPage] = React.useState(null);
-
-        // Navigation logic
-        const handleNavigation = (page) => {
-          const menuScreen = document.getElementById('menuScreen');
-          const rootElement = document.getElementById('root');
-          const backBtn = document.getElementById('backBtn');
-
-          if (page === null) {
-            menuScreen.classList.remove('hidden');
-            rootElement.classList.add('hidden');
-            backBtn.classList.add('hidden');
-          } else {
-            menuScreen.classList.add('hidden');
-            rootElement.classList.remove('hidden');
-            backBtn.classList.remove('hidden');
-          }
-          setCurrentPage(page);
-        };
-
-        // Event listeners for buttons
-        React.useEffect(() => {
-          const buttons = {
-            timeLoggerBtn: 'timeLogger',
-            materialsReceiptBtn: 'materialsReceipt',
-            subInvoiceBtn: 'subInvoice',
-            estimateCreatorBtn: 'estimateCreator',
-            dashboardBtn: 'dashboard'  // Updated to use dashboard
+      // Main App Component
+      function App() {
+        var useState = React.useState;
+        var useRef = React.useRef;
+        var useEffect = React.useEffect;
+        
+        var mounted = useRef(true);
+        
+        useEffect(function() {
+          return function cleanup() {
+            mounted.current = false;
           };
-
-          // Add click handlers
-          Object.entries(buttons).forEach(([btnId, page]) => {
-            const btn = document.getElementById(btnId);
-            if (btn) {
-              const handler = () => handleNavigation(page);
-              btn.addEventListener('click', handler);
-              return () => btn.removeEventListener('click', handler);
-            }
-          });
-
-          // Back button handler
-          const backBtn = document.getElementById('backBtn');
-          if (backBtn) {
-            const handleBack = () => handleNavigation(null);
-            backBtn.addEventListener('click', handleBack);
-            return () => backBtn.removeEventListener('click', handleBack);
-          }
         }, []);
 
-        // Render appropriate component
-        if (!currentPage) return null;
+        var currentViewState = useState('menu');
+        var currentView = currentViewState[0];
+        var setCurrentView = currentViewState[1];
+        
+        var loadingState = useState(false);
+        var isLoading = loadingState[0];
+        var setIsLoading = loadingState[1];
 
-        // This was the issue - button mappings were correct but components object was incomplete
-        const components = {
-          timeLogger: window.TimeLogger,
-          materialsReceipt: window.MaterialsReceipt,
-          subInvoice: window.SubInvoice,         // This was missing the correct reference
-          estimateCreator: window.EstimateCreator,
-          dashboard: window.Dashboard
-        };
+        var menuItems = [
+          {
+            id: 'timeLogger',
+            title: 'Time Logger',
+            icon: '⏱️',
+            description: 'Record time spent on projects',
+            component: window.TimeLoggerComponent
+          },
+          {
+            id: 'materials',
+            title: 'Materials Receipt',
+            icon: '📦',
+            description: 'Track materials and receipts',
+            component: window.MaterialsReceiptComponent
+          },
+          {
+            id: 'customers',
+            title: 'Customer Management',
+            icon: '👥',
+            description: 'Manage customer information',
+            component: window.CustomerManagementComponent
+          },
+          {
+            id: 'vendors',
+            title: 'Vendor Management',
+            icon: '🏢',
+            description: 'Manage vendor information',
+            component: window.VendorManagementComponent
+          },
+          {
+            id: 'subcontractors',
+            title: 'Subcontractor Management',
+            icon: '👷',
+            description: 'Manage subcontractor information',
+            component: window.SubcontractorManagementComponent
+          },
+          {
+            id: 'estimates',
+            title: 'Estimate Creator',
+            icon: '📝',
+            description: 'Create and manage estimates',
+            component: window.EstimateCreatorComponent
+          }
+        ];
 
-        // Add debug logging to help diagnose
-        console.log('Available components:', {
-          timeLogger: !!window.TimeLogger,
-          materialsReceipt: !!window.MaterialsReceipt,
-          subInvoice: !!window.SubInvoice,
-          estimateCreator: !!window.EstimateCreator,
-          dashboard: !!window.Dashboard
-        });
+        function handleNavigate(itemId) {
+          var timeoutId = setTimeout(function() {
+            if (mounted.current) {
+              setIsLoading(false);
+            }
+          }, 300);
+          setIsLoading(true);
+          setCurrentView(itemId);
+          return function cleanup() {
+            clearTimeout(timeoutId);
+          };
+        }
 
-        const Component = components[currentPage];
-        return Component ? React.createElement(Component) : null;
-      };
+        return React.createElement(window.SharedUI.Container, null, [
+          // Header
+          React.createElement('header', {
+            key: 'header',
+            className: 'py-6 sm:py-8'
+          }, [
+            React.createElement('div', {
+              key: 'logo-container',
+              className: 'flex justify-center items-center mb-6'
+            }, [
+              React.createElement('img', {
+                key: 'logo',
+                src: 'https://raw.githubusercontent.com/Cradcliff187/AKC-BETA-SIMPLE/64b7144f3996311782e32ad5ca6b162f6b734c99/AKC%20logo%20Only%20llc.jpg',
+                alt: 'AKC LLC Logo',
+                className: 'h-16 sm:h-20 w-auto object-contain'
+              })
+            ]),
+            currentView !== 'menu' && React.createElement(window.SharedUI.Button, {
+              key: 'back-button',
+              text: '← Back to Menu',
+              onClick: function() { setCurrentView('menu'); },
+              variant: 'secondary',
+              className: 'mb-4 sm:mb-6 max-w-xs mx-auto'
+            })
+          ]),
 
-      // Initialize app only if React is available
-      const root = document.getElementById('root');
-      if (!root) {
-        console.error('Root element not found');
-        return;
+          // Loading Overlay
+          isLoading && React.createElement(window.SharedUI.LoadingOverlay, {
+            key: 'loading'
+          }),
+
+          // Main Content
+          currentView === 'menu' ? 
+            React.createElement('div', {
+              key: 'menu',
+              className: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6'
+            }, menuItems.map(function(item) {
+              return React.createElement(window.SharedUI.Card, {
+                key: item.id,
+                title: item.title,
+                subtitle: item.description,
+                onClick: function() { handleNavigate(item.id); },
+                className: 'text-center'
+              }, [
+                React.createElement('div', {
+                  key: 'icon',
+                  className: 'text-3xl mb-2'
+                }, item.icon)
+              ]);
+            })) :
+            React.createElement('div', {
+              key: 'component',
+              className: 'w-full'
+            }, React.createElement(
+              menuItems.find(function(item) { return item.id === currentView; })?.component || function() { return null; }
+            ))
+        ].filter(Boolean));
       }
-      
-      try {
-        ReactDOM.render(React.createElement(App), root);
-      } catch (error) {
-        console.error('Error rendering app:', error);
-      }
-    });
+
+      console.log('Dependencies loaded, rendering app...');
+
+      // Render the app
+      ReactDOM.render(
+        React.createElement(App),
+        document.getElementById('app')
+      );
+    }
+
+    // Start initialization
+    initializeApp();
   </script>
 </body>
 </html>

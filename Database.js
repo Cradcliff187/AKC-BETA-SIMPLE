@@ -194,14 +194,29 @@ function logMaterialsReceipt(data) {
   const sheet = getSheet(CONFIG.SHEETS.MATERIALS_RECEIPTS);
   if (!sheet) throw new Error("Materials Receipts sheet not found");
 
+  Logger.log('Logging materials receipt with data:', data);
   const receiptId = "MATREC-" + new Date().getTime();
+  
+  // Format the document URL if needed
+  let docUrl = data.receiptDocURL || '';
+  if (docUrl && !docUrl.startsWith('http')) {
+    if (docUrl.includes('id=')) {
+      const fileId = docUrl.split('id=')[1];
+      docUrl = `https://drive.google.com/file/d/${fileId}/view`;
+    } else if (docUrl.match(/^[A-Za-z0-9_-]+$/)) {
+      docUrl = `https://drive.google.com/file/d/${docUrl}/view`;
+    }
+  }
+  
+  Logger.log('Formatted doc URL:', docUrl);
+
   sheet.appendRow([
     receiptId,
     data.projectId,
     data.vendorId,
     data.vendorName,
     data.amount,
-    data.receiptDocURL || '',
+    docUrl,
     data.submittingUser,
     data.forUserEmail,
     new Date()
@@ -218,7 +233,7 @@ function logMaterialsReceipt(data) {
       vendorId: data.vendorId,
       vendorName: data.vendorName,
       amount: data.amount,
-      receiptDocURL: data.receiptDocURL || '',
+      receiptDocURL: docUrl,
       forUserEmail: data.forUserEmail || data.submittingUser
     }
   });
@@ -460,28 +475,60 @@ function getCustomers() {
 
 // Vendor Data Fetching
 function getVendors() {
-  const { headers, rows } = getSheetData(CONFIG.SHEETS.VENDORS);
-  const vendorIdCol = headers.indexOf("VendorID");
-  const vendorNameCol = headers.indexOf("VendorName");
-  const addressCol = headers.indexOf("Address");
-  const cityCol = headers.indexOf("City");
-  const stateCol = headers.indexOf("State");
-  const zipCol = headers.indexOf("Zip");
-  const emailCol = headers.indexOf("Email");
-  const phoneCol = headers.indexOf("Phone");
-  const statusCol = headers.indexOf("Status");
+  Logger.log('=== Starting getVendors ===');
+  try {
+    const { headers, rows } = getSheetData(CONFIG.SHEETS.VENDORS);
+    Logger.log(`Retrieved ${rows.length} rows from Vendors sheet`);
+    Logger.log('Headers:', headers);
 
-  return rows.map(row => ({
-    vendorId: row[vendorIdCol],
-    vendorName: row[vendorNameCol],
-    address: row[addressCol],
-    city: row[cityCol],
-    state: row[stateCol],
-    zip: row[zipCol],
-    email: row[emailCol],
-    phone: row[phoneCol],
-    status: row[statusCol] || 'Active'
-  }));
+    const vendorIdCol = headers.indexOf("VendorID");
+    const vendorNameCol = headers.indexOf("VendorName");
+    const addressCol = headers.indexOf("Address");
+    const cityCol = headers.indexOf("City");
+    const stateCol = headers.indexOf("State");
+    const zipCol = headers.indexOf("Zip");
+    const emailCol = headers.indexOf("Email");
+    const phoneCol = headers.indexOf("Phone");
+    const statusCol = headers.indexOf("Status");
+    const createdOnCol = headers.indexOf("CreatedOn");
+
+    Logger.log('Column indices:', {
+      vendorId: vendorIdCol,
+      vendorName: vendorNameCol,
+      address: addressCol,
+      city: cityCol,
+      state: stateCol,
+      zip: zipCol,
+      email: emailCol,
+      phone: phoneCol,
+      status: statusCol,
+      createdOn: createdOnCol
+    });
+
+    const vendors = rows.map(row => ({
+      vendorId: row[vendorIdCol],
+      vendorName: row[vendorNameCol],
+      address: row[addressCol],
+      city: row[cityCol],
+      state: row[stateCol],
+      zip: row[zipCol],
+      email: row[emailCol],
+      phone: row[phoneCol],
+      status: row[statusCol] || 'Active',
+      createdDate: row[createdOnCol] || null
+    }));
+
+    Logger.log(`Mapped ${vendors.length} vendors`);
+    if (vendors.length > 0) {
+      Logger.log('First vendor:', JSON.stringify(vendors[0]));
+    }
+
+    return vendors;
+  } catch (error) {
+    Logger.log(`Error in getVendors: ${error.message}`);
+    Logger.log(`Stack: ${error.stack}`);
+    throw error;
+  }
 }
 
 // ==========================================
@@ -507,10 +554,9 @@ function createVendor(data) {
       data.zip || '',       // Zip
       data.email || '',     // Email
       data.phone || '',     // Phone
+      data.status || 'ACTIVE', // Status
       now,                  // CreatedOn
-      userEmail,           // CreatedBy
-      'ACTIVE',           // Status
-      'Vend'             // QbVendorType
+      'Vend'               // QbVendorType
     ]);
 
     // Verify the vendor was created
@@ -532,9 +578,8 @@ function createVendor(data) {
         zip: data.zip,
         email: data.email,
         phone: data.phone,
-        createdOn: now,
-        createdBy: userEmail,
         status: 'ACTIVE',
+        createdDate: now,
         qbVendorType: 'Vend'
       }
     };
@@ -1221,6 +1266,259 @@ function updateVendorData(vendorId, data) {
   if (data.zip) sheet.getRange(rowIndex + 1, zipCol + 1).setValue(data.zip);
   if (data.email) sheet.getRange(rowIndex + 1, emailCol + 1).setValue(data.email);
   if (data.phone) sheet.getRange(rowIndex + 1, phoneCol + 1).setValue(data.phone);
+  
+  return { success: true };
+}
+
+// ==========================================
+// ENHANCED SUBCONTRACTOR FUNCTIONS
+// ==========================================
+
+function getSubcontractorDetails(subId) {
+  const { headers, rows } = getSheetData(CONFIG.SHEETS.SUBINVOICES);
+  
+  // Get all invoices for this subcontractor
+  const subIdCol = headers.indexOf("SubID");
+  const projectIdCol = headers.indexOf("ProjectID");
+  const amountCol = headers.indexOf("InvoiceAmount");
+  const dateCol = headers.indexOf("DateCreated");
+  const statusCol = headers.indexOf("Status");
+  
+  const invoices = rows
+    .filter(row => row[subIdCol] === subId)
+    .map(row => ({
+      projectId: row[projectIdCol],
+      amount: parseFloat(row[amountCol]) || 0,
+      date: row[dateCol],
+      status: row[statusCol]
+    }));
+
+  // Calculate metrics
+  const metrics = {
+    invoiceCount: invoices.length,
+    totalInvoiced: invoices.reduce((sum, inv) => sum + inv.amount, 0),
+    uniqueProjects: [...new Set(invoices.map(inv => inv.projectId))].length,
+    recentInvoices: invoices
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 5),
+    projectBreakdown: invoices.reduce((acc, inv) => {
+      if (!acc[inv.projectId]) {
+        acc[inv.projectId] = {
+          count: 0,
+          total: 0
+        };
+      }
+      acc[inv.projectId].count++;
+      acc[inv.projectId].total += inv.amount;
+      return acc;
+    }, {})
+  };
+
+  return { invoices, metrics };
+}
+
+function enrichSubcontractorData(subcontractor) {
+  const { invoices, metrics } = getSubcontractorDetails(subcontractor.subId);
+  
+  // Get project details for active projects
+  const projectIds = [...new Set(invoices.map(inv => inv.projectId))];
+  const projects = getProjectsByIds(projectIds);
+  
+  const activeProjects = projects.filter(p => p.status === 'IN_PROGRESS');
+  const completedProjects = projects.filter(p => p.status === 'COMPLETED');
+
+  return {
+    ...subcontractor,
+    metrics: {
+      ...metrics,
+      activeProjects: activeProjects.length,
+      completedProjects: completedProjects.length
+    },
+    recentInvoices: metrics.recentInvoices,
+    projects: projects
+  };
+}
+
+// ==========================================
+// ENHANCED VENDOR FUNCTIONS
+// ==========================================
+
+function getVendorDetails(vendorId) {
+  const { headers, rows } = getSheetData(CONFIG.SHEETS.MATERIALS_RECEIPTS);
+  
+  // Get all receipts for this vendor
+  const vendorIdCol = headers.indexOf("VendorID");
+  const projectIdCol = headers.indexOf("ProjectID");
+  const amountCol = headers.indexOf("Amount");
+  const dateCol = headers.indexOf("DateCreated");
+  const categoryCol = headers.indexOf("Category");
+  const receiptIdCol = headers.indexOf("ReceiptID");
+  const receiptDocURLCol = headers.indexOf("ReceiptDocURL");
+  
+  const receipts = rows
+    .filter(row => row[vendorIdCol] === vendorId)
+    .map(row => ({
+      id: row[receiptIdCol],
+      receiptId: row[receiptIdCol],
+      projectId: row[projectIdCol],
+      amount: parseFloat(row[amountCol]) || 0,
+      date: row[dateCol],
+      category: row[categoryCol] || 'Uncategorized',
+      receiptDocURL: row[receiptDocURLCol] || ''
+    }));
+
+  // Calculate metrics
+  const metrics = {
+    receiptCount: receipts.length,
+    totalSpent: receipts.reduce((sum, rec) => sum + rec.amount, 0),
+    uniqueProjects: [...new Set(receipts.map(rec => rec.projectId))].length,
+    recentPurchases: receipts
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 5),
+    categoryBreakdown: receipts.reduce((acc, rec) => {
+      const category = rec.category || 'Uncategorized';
+      if (!acc[category]) {
+        acc[category] = {
+          count: 0,
+          total: 0
+        };
+      }
+      acc[category].count++;
+      acc[category].total += rec.amount;
+      return acc;
+    }, {})
+  };
+
+  return { receipts, metrics };
+}
+
+function enrichVendorData(vendor) {
+  const { receipts, metrics } = getVendorDetails(vendor.vendorId);
+  
+  // Get project details
+  const projectIds = [...new Set(receipts.map(rec => rec.projectId))];
+  const projects = getProjectsByIds(projectIds);
+
+  return {
+    ...vendor,
+    metrics,
+    recentPurchases: metrics.recentPurchases,
+    projects: projects
+  };
+}
+
+// Helper function to get projects by IDs
+function getProjectsByIds(projectIds) {
+  const { headers, rows } = getSheetData(CONFIG.SHEETS.PROJECTS);
+  
+  const projectIdCol = headers.indexOf("ProjectID");
+  const nameCol = headers.indexOf("ProjectName");
+  const statusCol = headers.indexOf("Status");
+  
+  return rows
+    .filter(row => projectIds.includes(row[projectIdCol]))
+    .map(row => ({
+      projectId: row[projectIdCol],
+      name: row[nameCol],
+      status: row[statusCol]
+    }));
+}
+
+function getVendorById(vendorId) {
+  const { headers, rows } = getSheetData(CONFIG.SHEETS.VENDORS);
+  
+  const vendorIdCol = headers.indexOf("VendorID");
+  const vendorNameCol = headers.indexOf("VendorName");
+  const addressCol = headers.indexOf("Address");
+  const cityCol = headers.indexOf("City");
+  const stateCol = headers.indexOf("State");
+  const zipCol = headers.indexOf("Zip");
+  const emailCol = headers.indexOf("Email");
+  const phoneCol = headers.indexOf("Phone");
+  const statusCol = headers.indexOf("Status");
+  const createdOnCol = headers.indexOf("CreatedOn");
+  const categoryCol = headers.indexOf("Category") || -1;
+  
+  const vendorRow = rows.find(row => row[vendorIdCol] === vendorId);
+  
+  if (!vendorRow) return null;
+  
+  return {
+    vendorId: vendorRow[vendorIdCol],
+    vendorName: vendorRow[vendorNameCol],
+    address: vendorRow[addressCol],
+    city: vendorRow[cityCol],
+    state: vendorRow[stateCol],
+    zip: vendorRow[zipCol],
+    email: vendorRow[emailCol],
+    phone: vendorRow[phoneCol],
+    status: vendorRow[statusCol] || 'Active',
+    createdDate: vendorRow[createdOnCol] || null,
+    category: categoryCol !== -1 ? vendorRow[categoryCol] : ''
+  };
+}
+
+function getMaterialsReceiptsByVendor(vendorId) {
+  const sheet = getSheet(CONFIG.SHEETS.MATERIALS_RECEIPTS);
+  if (!sheet) {
+    console.error('Materials Receipts sheet not found');
+    return [];
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  
+  // Find column indices based on headers
+  const receiptIdCol = headers.indexOf("ReceiptID");
+  const projectIdCol = headers.indexOf("ProjectID");
+  const vendorIdCol = headers.indexOf("VendorID");
+  const vendorNameCol = headers.indexOf("VendorName");
+  const amountCol = headers.indexOf("Amount");
+  const receiptDocURLCol = headers.indexOf("ReceiptDocURL");
+  const submittingUserCol = headers.indexOf("SubmittingUser");
+  const timestampCol = headers.indexOf("Timestamp");
+  const descriptionCol = headers.indexOf("Description");  // May not exist
+  
+  console.log('Searching for receipts with vendorId:', vendorId);
+  
+  // Filter rows for this vendor
+  const vendorReceipts = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    
+    if (row[vendorIdCol] === vendorId) {
+      vendorReceipts.push({
+        id: row[receiptIdCol],
+        projectId: row[projectIdCol],
+        vendorId: row[vendorIdCol],
+        vendorName: row[vendorNameCol],
+        amount: row[amountCol],
+        receiptDocURL: row[receiptDocURLCol] || '',
+        submittingUser: row[submittingUserCol] || '',
+        timestamp: row[timestampCol],
+        createdOn: row[timestampCol],
+        description: descriptionCol !== -1 ? row[descriptionCol] : 'Materials purchase'
+      });
+    }
+  }
+  
+  console.log(`Found ${vendorReceipts.length} receipts for vendor ${vendorId}`);
+  return vendorReceipts;
+}
+
+function updateVendorName(vendorId, newName) {
+  const sheet = getSheet(CONFIG.SHEETS.VENDORS);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  
+  const vendorIdCol = headers.indexOf("VendorID");
+  const nameCol = headers.indexOf("VendorName");
+  
+  const rowIndex = values.findIndex(row => row[vendorIdCol] === vendorId);
+  if (rowIndex === -1) throw new Error("Vendor not found");
+  
+  // Update the vendor name
+  sheet.getRange(rowIndex + 1, nameCol + 1).setValue(newName);
   
   return { success: true };
 }

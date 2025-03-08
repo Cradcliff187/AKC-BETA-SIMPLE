@@ -1,32 +1,30 @@
 <script>
 (function() {
   // Add at the top of the Dashboard.html script
-  const formatCurrency = (amount) => {
+  function formatCurrency(amount) {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD'
     }).format(amount);
-  };
-
-  // Remove duplicate constants since they're already in Config.js
-  // We can reference them directly from the global scope:
-  // PROJECT_STATUSES, ESTIMATE_STATUSES, STATUS_TRANSITIONS
+  }
 
   // === Standardized Loading Overlay ===
-  const StandardLoadingOverlay = ({ message = 'Loading...' }) => {
+  function StandardLoadingOverlay(props) {
+    var message = props.message || 'Loading...';
+    
     return React.createElement('div', {
       className: 'absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50'
     }, 
       React.createElement('div', { 
         className: 'text-center flex flex-col items-center justify-center' 
-      },
+      }, [
         // Spinner SVG
         React.createElement('svg', {
           className: 'animate-spin h-10 w-10 text-blue-600 mb-4',
           xmlns: 'http://www.w3.org/2000/svg',
           fill: 'none',
           viewBox: '0 0 24 24'
-        },
+        }, [
           React.createElement('circle', {
             className: 'opacity-25',
             cx: '12',
@@ -40,750 +38,299 @@
             fill: 'currentColor',
             d: 'M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
           })
-        ),
+        ]),
         // Loading text
         React.createElement('span', { 
           className: 'text-lg text-gray-700 font-semibold' 
         }, message)
-      )
+      ])
     );
-  };
+  }
 
-  const Dashboard = () => {
-    const mountedRef = React.useRef(true);
-
-    // === State Management ===
-    const [activeTab, setActiveTab] = React.useState('customers'); // Default to customers tab
-    const [loading, setLoading] = React.useState(true);
-    const [componentLoading, setComponentLoading] = React.useState(false);
-    const [message, setMessage] = React.useState({ text: '', type: '' });
-    const [analytics, setAnalytics] = React.useState({
-      customers: { total: 0, active: 0 },
-      vendors: { total: 0, active: 0 },
-      subcontractors: { total: 0, active: 0 },
-      projects: { total: 0, active: 0, pending: 0 }
-    });
-    const [initialized, setInitialized] = React.useState(false);
-
-    // === Message Handler ===
-    const showMessage = React.useCallback((text, type = 'info') => {
-      if (!mountedRef.current) return;
-      setMessage({ text, type });
-      setTimeout(() => {
-        if (mountedRef.current) {
-          setMessage({ text: '', type: '' });
-        }
-      }, 5000);
-    }, []);
-
-    // === Data Fetching ===
-    const fetchAnalytics = React.useCallback(() => {
-      if (!mountedRef.current) return;
-      setLoading(true);
-      
-      return new Promise((resolve, reject) => {
-        google.script.run
-          .withSuccessHandler(response => {
-            if (!mountedRef.current) return;
-            if (response.success) {
-              setAnalytics(response.data);
-              setLoading(false);
-              resolve(response.data);
-            } else {
-              setLoading(false);
-              reject(new Error(response.error || 'Failed to fetch analytics'));
-            }
-            setInitialized(true);
-          })
-          .withFailureHandler(error => {
-            if (!mountedRef.current) return;
-            console.error('Error fetching analytics:', error);
-            setLoading(false);
-            setInitialized(true);
-            reject(error);
-          })
-          .getDashboardAnalytics();
-      });
-    }, []);
-
-    // Export functionality
-    const exportAnalyticsData = () => {
-      const exportData = [
-        {
-          'Category': 'Customers',
-          'Total': analytics.customers.total,
-          'Active': analytics.customers.active
-        },
-        {
-          'Category': 'Vendors',
-          'Total': analytics.vendors.total,
-          'Active': analytics.vendors.active
-        },
-        {
-          'Category': 'Subcontractors',
-          'Total': analytics.subcontractors.total,
-          'Active': analytics.subcontractors.active
-        },
-        {
-          'Category': 'Projects',
-          'Total': analytics.projects.total,
-          'Active': analytics.projects.active,
-          'Pending': analytics.projects.pending
-        }
-      ];
-
-      // Convert to CSV
-      const headers = Object.keys(exportData[0]);
-      const csvContent = [
-        headers.join(','),
-        ...exportData.map(row => 
-          headers.map(header => 
-            JSON.stringify(row[header] || '')
-          ).join(',')
-        )
-      ].join('\n');
-
-      // Create download link
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', `dashboard_analytics_${new Date().toISOString()}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+  function DashboardComponent() {
+    var useState = React.useState;
+    var useEffect = React.useEffect;
+    
+    var dataState = useState({
+      projects: [],
+      tasks: [],
+      metrics: {
+        totalProjects: 0,
+        activeProjects: 0,
+        completedProjects: 0,
+        totalRevenue: 0,
+        pendingInvoices: 0,
+        upcomingDeadlines: 0
       }
-    };
+    });
+    var data = dataState[0];
+    var setData = dataState[1];
+    
+    var loadingState = useState(true);
+    var loading = loadingState[0];
+    var setLoading = loadingState[1];
+    
+    var errorState = useState(null);
+    var error = errorState[0];
+    var setError = errorState[1];
 
-    // Initial data fetch
-    React.useEffect(() => {
-      fetchAnalytics();
-      return () => {
-        mountedRef.current = false;
-      };
-    }, [fetchAnalytics]);
+    // Load dashboard data on mount
+    useEffect(function() {
+      loadDashboardData();
+    }, []);
 
-    // === Tab Rendering ===
-    const renderTabs = () => {
-      const tabs = [
-        { id: 'customers', label: 'Customers', icon: '👥' },
-        { id: 'vendors', label: 'Vendors', icon: '🏢' },
-        { id: 'subcontractors', label: 'Subcontractors', icon: '🔧' }
+    function loadDashboardData() {
+      setLoading(true);
+      google.script.run
+        .withSuccessHandler(handleDataLoaded)
+        .withFailureHandler(handleError)
+        .getDashboardData();
+    }
+
+    function handleDataLoaded(result) {
+      setData(result || {
+        projects: [],
+        tasks: [],
+        metrics: {
+          totalProjects: 0,
+          activeProjects: 0,
+          completedProjects: 0,
+          totalRevenue: 0,
+          pendingInvoices: 0,
+          upcomingDeadlines: 0
+        }
+      });
+      setLoading(false);
+    }
+
+    function handleError(error) {
+      setError(error.message || 'An error occurred');
+      setLoading(false);
+    }
+
+    // Metrics Grid Component
+    function MetricsGrid() {
+      var metrics = [
+        {
+          label: 'Total Projects',
+          value: data.metrics.totalProjects,
+          icon: '📊',
+          color: 'bg-blue-100 text-blue-800'
+        },
+        {
+          label: 'Active Projects',
+          value: data.metrics.activeProjects,
+          icon: '🔄',
+          color: 'bg-green-100 text-green-800'
+        },
+        {
+          label: 'Completed Projects',
+          value: data.metrics.completedProjects,
+          icon: '✅',
+          color: 'bg-purple-100 text-purple-800'
+        },
+        {
+          label: 'Total Revenue',
+          value: new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD'
+          }).format(data.metrics.totalRevenue),
+          icon: '💰',
+          color: 'bg-yellow-100 text-yellow-800'
+        },
+        {
+          label: 'Pending Invoices',
+          value: data.metrics.pendingInvoices,
+          icon: '📝',
+          color: 'bg-red-100 text-red-800'
+        },
+        {
+          label: 'Upcoming Deadlines',
+          value: data.metrics.upcomingDeadlines,
+          icon: '⏰',
+          color: 'bg-indigo-100 text-indigo-800'
+        }
       ];
-
-      return React.createElement('div', { className: 'border-b border-gray-200 mb-6 overflow-x-auto' },
-        React.createElement('nav', { className: 'flex flex-nowrap min-w-full px-2' },
-          tabs.map(tab => 
-            React.createElement('button', {
-              key: tab.id,
-              onClick: () => setActiveTab(tab.id),
-              className: `flex-1 min-w-[120px] py-4 px-4 font-medium text-sm border-b-2 flex items-center justify-center gap-2
-                ${activeTab === tab.id 
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`
-            }, 
-              React.createElement('span', { className: 'text-lg sm:text-base' }, tab.icon),
-              React.createElement('span', { className: 'hidden sm:inline' }, tab.label)
-            )
-          )
-        )
-      );
-    };
-
-    // === Analytics Cards ===
-    const renderAnalytics = () => {
-      const stats = [
-        { 
-          label: 'Active Projects', 
-          value: analytics.projects?.active || 0, 
-          color: 'green',
-          type: 'project',
-          onClick: () => handleItemClick('project', PROJECT_STATUSES.IN_PROGRESS)
-        },
-        { 
-          label: 'Approved Projects', 
-          value: analytics.projects?.approved || 0, 
-          color: 'yellow',
-          type: 'project',
-          onClick: () => handleItemClick('project', PROJECT_STATUSES.APPROVED)
-        },
-        { 
-          label: 'Pending Estimates', 
-          value: analytics.estimates?.pending || 0, 
-          color: 'blue',
-          type: 'estimate',
-          onClick: () => handleItemClick('estimate', ESTIMATE_STATUSES.PENDING)
-        }
-      ];
-
-      return React.createElement('div', { 
-        className: 'grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6' 
-      },
-        stats.map(stat => 
-          React.createElement('button', { 
-            key: stat.label,
-            onClick: stat.onClick,
-            className: `bg-${stat.color}-50 p-4 rounded-lg border border-${stat.color}-200 
-              hover:bg-${stat.color}-100 transition-colors w-full text-left`
-          },
-            React.createElement('div', { className: 'text-sm text-gray-600' }, stat.label),
-            React.createElement('div', { className: 'text-2xl font-bold mt-1' }, stat.value)
-          )
-        )
-      );
-    };
-
-    // === Item List Modal ===
-    const ItemListModal = ({ isOpen, type, status, onClose, onAnalyticsChange }) => {
-      // Add loading ref to prevent duplicate requests
-      const loadingRef = React.useRef(false);
-      const [items, setItems] = React.useState([]);
-      const [loading, setLoading] = React.useState(true);
-      const [error, setError] = React.useState(null);
-      const [selectedItem, setSelectedItem] = React.useState(null);
-      const [viewMode, setViewMode] = React.useState('list');
-
-      // Modify loadItems to use ref-based loading check
-      const loadItems = React.useCallback(() => {
-        if (!isOpen || loadingRef.current) return;
-        
-        loadingRef.current = true;
-        setLoading(true);
-        setError(null);
-  
-        const endpoint = type === 'project' ? 'getProjectsByStatus' : 'getEstimatesByStatus';
-        
-        console.log(`Fetching ${type}s with status: ${status}`);
-        
-        google.script.run
-          .withSuccessHandler(response => {
-            if (!isOpen) return;
-            
-            console.log(`Raw ${type} response:`, response);
-            
-            if (!response) {
-              console.error(`Null response received for ${type}s`);
-              setError(`Failed to fetch ${type}s - null response`);
-              setItems([]);
-            } else {
-              // Handle both standardized and legacy response formats
-              let processedItems;
-              if (Array.isArray(response)) {
-                processedItems = response;
-                console.log(`Processing ${processedItems.length} ${type}s (legacy format)`);
-              } else if (response.success && Array.isArray(response.data)) {
-                processedItems = response.data;
-                console.log(`Processing ${processedItems.length} ${type}s (standard format)`);
-              } else {
-                console.error(`Invalid response format for ${type}s`);
-                setError(`Invalid response format`);
-                setItems([]);
-                return;
-              }
-  
-              // Normalize the data structure
-              const normalizedItems = processedItems.map(item => ({
-                id: item.id || item.projectId || item.estimateId,
-                projectId: item.projectId,
-                estimateId: item.estimateId,
-                name: item.name || item.projectName,
-                projectName: item.projectName,
-                customerName: item.customerName || 'N/A',
-                status: item.status || 'Unknown'
-              }));
-  
-              setItems(normalizedItems);
-            }
-            setLoading(false);
-            loadingRef.current = false;
-          })
-          .withFailureHandler(error => {
-            if (!isOpen) return;
-            
-            const errorMsg = error?.message || `Failed to fetch ${type}s`;
-            console.error(`Server error fetching ${type}s:`, error);
-            setError(errorMsg);
-            setItems([]);
-            setLoading(false);
-            loadingRef.current = false;
-          })
-          [endpoint](status);
-      }, [isOpen, type, status]);
-
-      // Cleanup effect
-      React.useEffect(() => {
-        return () => {
-          loadingRef.current = false;
-        };
-      }, []);
-
-      // Load items effect
-      React.useEffect(() => {
-        if (isOpen) {
-          loadItems();
-        }
-        return () => {
-          // Reset state when modal closes
-          setItems([]);
-          setError(null);
-          setSelectedItem(null);
-          setViewMode('list');
-        };
-      }, [isOpen, loadItems]);
-
-      const handleStatusUpdate = async (itemId, newStatus, comment) => {
-        // Add confirmation dialog
-        if (!confirm(`Are you sure you want to change the status to ${newStatus}?`)) {
-          return;
-        }
-
-        setLoading(true);
-        
-        const endpoint = type === 'project' ? 'updateProjectStatusForClient' : 'updateEstimateStatusForClient';
-        const idField = type === 'project' ? 'projectId' : 'estimateId';
-        
-        try {
-          const response = await new Promise((resolve, reject) => {
-            google.script.run
-              .withSuccessHandler(resolve)
-              .withFailureHandler(reject)
-              [endpoint]({
-                [idField]: itemId,
-                newStatus,
-                comment
-              });
-          });
-
-          if (response.success) {
-            // Refresh the items list
-            loadItems();
-            
-            // Trigger analytics refresh in parent
-            if (onAnalyticsChange) {
-              onAnalyticsChange();
-            }
-          } else {
-            throw new Error(response.error || 'Update failed');
-          }
-        } catch (error) {
-          console.error('Status update error:', error);
-          setError('Failed to update status');
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      // Get available status transitions
-      const getAvailableStatuses = (currentStatus) => {
-        const transitions = STATUS_TRANSITIONS[type.toUpperCase()];
-        if (!transitions || !transitions[currentStatus]) {
-          return type === 'project' ? Object.values(PROJECT_STATUSES) : Object.values(ESTIMATE_STATUSES);
-        }
-        return transitions[currentStatus];
-      };
-
-      // Add function to load detailed item data
-      const loadItemDetails = React.useCallback((itemId) => {
-        setLoading(true);
-        const endpoint = type === 'project' ? 'getProjectDetails' : 'getEstimateDetails';
-        
-        google.script.run
-          .withSuccessHandler(response => {
-            if (response.success) {
-              setSelectedItem(response.data);
-            } else {
-              setError(response.error || 'Failed to load details');
-            }
-            setLoading(false);
-          })
-          .withFailureHandler(error => {
-            setError(error.message || 'Failed to load details');
-            setLoading(false);
-          })
-          [endpoint](itemId);
-      }, [type]);
-
-      // Add view details handler
-      const handleViewDetails = (item) => {
-        setSelectedItem(item);
-        loadItemDetails(item.id || item.projectId || item.estimateId);
-        setViewMode('detail');
-      };
-
-      // Add back to list handler
-      const handleBackToList = () => {
-        setViewMode('list');
-        setSelectedItem(null);
-      };
-
-      // Add state for status modal
-      const [statusModalOpen, setStatusModalOpen] = React.useState(false);
-
-      // Add StatusChangeModal to ItemListModal render
-      const StatusChangeModal = ({ item, isOpen, onClose, onStatusChange }) => {
-        if (!isOpen) return null;
-        
-        const currentStatus = item.status;
-        const availableStatuses = getAvailableStatuses(currentStatus);
-        const [selectedStatus, setSelectedStatus] = React.useState('');
-        const [comment, setComment] = React.useState('');
-
-        const handleSubmit = () => {
-          if (!selectedStatus) {
-            showMessage('Please select a status', 'error');
-            return;
-          }
-          onStatusChange(item.id, selectedStatus, comment);
-          onClose();
-        };
-
-        return React.createElement('div', {
-          className: 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'
-        },
-          React.createElement('div', {
-            className: 'bg-white rounded-lg p-6 w-full max-w-lg'
-          },
-            // Header
-            React.createElement('div', { className: 'mb-6' },
-              React.createElement('h3', { 
-                className: 'text-lg font-semibold' 
-              }, 'Update Status'),
-              React.createElement('div', { className: 'mt-2 space-y-1 text-sm text-gray-600' },
-                React.createElement('p', null, `Estimate ID: ${item.estimateId || item.id}`),
-                React.createElement('p', null, `Project Name: ${item.projectName || item.name}`),
-                React.createElement('p', null, `Customer: ${item.customerName}`),
-                React.createElement('p', null, `Current Status: ${currentStatus}`)
-              )
-            ),
-            
-            // Status Timeline
-            React.createElement('div', { className: 'mb-6' },
-              React.createElement('div', { className: 'flex items-center space-x-4' },
-                availableStatuses.map((status, index) => 
-                  React.createElement('div', { 
-                    key: status,
-                    className: 'flex items-center'
-                  },
-                    React.createElement('div', {
-                      className: `w-8 h-8 rounded-full flex items-center justify-center ${
-                        status === currentStatus ? 'bg-blue-500 text-white' : 'bg-gray-200'
-                      }`
-                    }, index + 1),
-                    React.createElement('div', { className: 'ml-2 text-sm' }, status),
-                    index < availableStatuses.length - 1 && React.createElement('div', {
-                      className: 'w-8 h-0.5 bg-gray-200 ml-2'
-                    })
-                  )
-                )
-              )
-            ),
-
-            // Status Selection
-            React.createElement('div', { className: 'mb-4' },
-              React.createElement('label', { 
-                className: 'block text-sm font-medium text-gray-700 mb-2'
-              }, 'New Status'),
-              React.createElement('select', {
-                value: selectedStatus,
-                onChange: (e) => setSelectedStatus(e.target.value),
-                className: 'w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500'
-              },
-                React.createElement('option', { value: '' }, 'Select status...'),
-                availableStatuses.map(status =>
-                  React.createElement('option', {
-                    key: status,
-                    value: status,
-                    disabled: status === currentStatus
-                  }, status)
-                )
-              )
-            ),
-
-            // Comment Field
-            React.createElement('div', { className: 'mb-6' },
-              React.createElement('label', {
-                className: 'block text-sm font-medium text-gray-700 mb-2'
-              }, 'Comment (Optional)'),
-              React.createElement('textarea', {
-                value: comment,
-                onChange: (e) => setComment(e.target.value),
-                className: 'w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500',
-                rows: '3'
-              })
-            ),
-
-            // Action Buttons
-            React.createElement('div', { className: 'flex justify-end space-x-3' },
-              React.createElement('button', {
-                onClick: onClose,
-                className: 'px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50'
-              }, 'Cancel'),
-              React.createElement('button', {
-                onClick: handleSubmit,
-                disabled: !selectedStatus,
-                className: `px-4 py-2 rounded-md text-sm font-medium text-white ${
-                  selectedStatus ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400 cursor-not-allowed'
-                }`
-              }, 'Update Status')
-            )
-          )
-        );
-      };
-
-      const handleStatusChange = (item) => {
-        setSelectedItem(item);
-        setStatusModalOpen(true);
-      };
-
-      if (!isOpen) return null;
 
       return React.createElement('div', {
-        className: 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'
-      },
-        React.createElement('div', {
-          className: 'bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto'
-        },
-          React.createElement('div', { className: 'flex justify-between items-center mb-4' },
-            React.createElement('h3', { className: 'text-lg font-semibold' }, 
-              viewMode === 'list' 
-                ? `${status} ${type.charAt(0).toUpperCase() + type.slice(1)}s`
-                : `${type.charAt(0).toUpperCase() + type.slice(1)} Details`
-            ),
-            React.createElement('div', { className: 'flex gap-2' },
-              viewMode === 'detail' && React.createElement('button', {
-                onClick: handleBackToList,
-                className: 'text-blue-600 hover:text-blue-800'
-              }, 'Back to List'),
-              React.createElement('button', {
-                onClick: onClose,
-                className: 'text-gray-500 hover:text-gray-700 text-xl'
-              }, '×')
-            )
-          ),
-          error && React.createElement('div', { 
-            className: 'text-red-600 mb-4 p-4 bg-red-50 rounded' 
-          }, error),
-          loading ? 
-            React.createElement(StandardLoadingOverlay, { message: `Loading ${type}s...` }) :
-            viewMode === 'list' ?
-              // List View
-              items.length === 0 ?
-                React.createElement('div', { 
-                  className: 'text-center py-8 text-gray-500' 
-                }, `No ${status.toLowerCase()} ${type}s found`) :
-                React.createElement('table', { className: 'min-w-full divide-y divide-gray-200' },
-                  React.createElement('thead', { className: 'bg-gray-50' },
-                    React.createElement('tr', null,
-                      ['Estimate ID', 'Project Name', 'Customer', 'Status', 'Actions'].map(header =>
-                        React.createElement('th', {
-                          key: header,
-                          className: 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'
-                        }, header)
-                      )
-                    )
-                  ),
-                  React.createElement('tbody', { className: 'bg-white divide-y divide-gray-200' },
-                    items.map(item =>
-                      React.createElement('tr', { 
-                        key: item.id,
-                        onClick: () => handleViewDetails(item),
-                        className: 'cursor-pointer hover:bg-gray-50'  // Add pointer cursor and hover effect
-                      },
-                        React.createElement('td', { className: 'px-6 py-4' }, 
-                          item.estimateId || item.id
-                        ),
-                        React.createElement('td', { className: 'px-6 py-4' }, 
-                          item.projectName || ''
-                        ),
-                        React.createElement('td', { className: 'px-6 py-4' }, 
-                          item.customerName
-                        ),
-                        React.createElement('td', { className: 'px-6 py-4' }, 
-                          item.status
-                        ),
-                        React.createElement('td', { className: 'px-6 py-4' },
-                          React.createElement('button', {
-                            onClick: (e) => {
-                              e.stopPropagation();  // Prevent row click when clicking button
-                              handleStatusChange(item);
-                            },
-                            className: 'inline-flex items-center px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
-                          },
-                            React.createElement('span', { className: 'mr-2' }, 'Change Status'),
-                            React.createElement('svg', {
-                              className: 'h-4 w-4',
-                              fill: 'none',
-                              strokeLinecap: 'round',
-                              strokeLinejoin: 'round',
-                              strokeWidth: '2',
-                              viewBox: '0 0 24 24',
-                              stroke: 'currentColor'
-                            },
-                              React.createElement('path', { d: 'M19 9l-7 7-7-7' })
-                            )
-                          )
-                        )
-                      )
-                    )
-                  )
-                ) :
-              // Detail View
-              selectedItem && React.createElement('div', { className: 'space-y-4' },
-                // Item Details Section
-                React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
-                  React.createElement('div', { className: 'space-y-2' },
-                    React.createElement('h4', { className: 'font-semibold' }, 'Basic Information'),
-                    React.createElement('p', null, `ID: ${selectedItem.id || selectedItem.projectId || selectedItem.estimateId}`),
-                    React.createElement('p', null, `Name: ${selectedItem.name}`),
-                    React.createElement('p', null, `Status: ${selectedItem.status}`),
-                    React.createElement('p', null, `Customer: ${selectedItem.customerName}`)
-                  ),
-                  React.createElement('div', { className: 'space-y-2' },
-                    React.createElement('h4', { className: 'font-semibold' }, 'Additional Information'),
-                    selectedItem.jobDescription && React.createElement('p', null, `Description: ${selectedItem.jobDescription}`),
-                    selectedItem.amount && React.createElement('p', null, `Amount: ${formatCurrency(selectedItem.amount)}`),
-                    selectedItem.docUrl && React.createElement('a', {
-                      href: selectedItem.docUrl,
-                      target: '_blank',
-                      className: 'text-blue-600 hover:text-blue-800'
-                    }, 'View Document')
-                  )
-                )
-              )
-        ),
-        React.createElement(StatusChangeModal, {
-          item: selectedItem,
-          isOpen: statusModalOpen,
-          onClose: () => setStatusModalOpen(false),
-          onStatusChange: handleStatusUpdate
+        className: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'
+      }, metrics.map(function(metric) {
+        return React.createElement(SharedUI.Card, {
+          key: metric.label,
+          className: 'p-6'
+        }, [
+          React.createElement('div', {
+            className: 'flex items-center gap-4'
+          }, [
+            React.createElement('span', {
+              className: metric.color + ' p-3 rounded-full'
+            }, metric.icon),
+            React.createElement('div', null, [
+              React.createElement('h3', {
+                className: 'text-lg font-semibold'
+              }, metric.value),
+              React.createElement('p', {
+                className: 'text-sm text-gray-600'
+              }, metric.label)
+            ])
+          ])
+        ]);
+      }));
+    }
+
+    // Recent Projects Component
+    function RecentProjects() {
+      if (!data.projects.length) {
+        return React.createElement(SharedUI.Card, {
+          className: 'text-center py-8'
+        }, [
+          React.createElement('p', {
+            className: 'text-gray-500'
+          }, 'No recent projects')
+        ]);
+      }
+
+      return React.createElement('div', {
+        className: 'space-y-4'
+      }, [
+        React.createElement('h2', {
+          className: 'text-lg font-semibold'
+        }, 'Recent Projects'),
+        data.projects.map(function(project) {
+          return React.createElement(SharedUI.Card, {
+            key: project.id,
+            className: 'hover:shadow-md transition-shadow duration-200'
+          }, [
+            React.createElement('div', {
+              className: 'flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4'
+            }, [
+              React.createElement('div', {
+                className: 'flex-1'
+              }, [
+                React.createElement('div', {
+                  className: 'flex items-center gap-2'
+                }, [
+                  React.createElement('span', {
+                    className: 'text-lg font-semibold'
+                  }, project.name),
+                  React.createElement('span', {
+                    className: [
+                      'px-2',
+                      'py-1',
+                      'text-xs',
+                      'rounded-full',
+                      project.status === 'active' 
+                        ? 'bg-green-100 text-green-800' 
+                        : project.status === 'completed'
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-gray-100 text-gray-800'
+                    ].join(' ')
+                  }, project.status)
+                ]),
+                React.createElement('p', {
+                  className: 'text-sm text-gray-600'
+                }, 'Customer: ' + project.customerName + ' - Progress: ' + project.progress + '%')
+              ]),
+              React.createElement('div', {
+                className: 'w-full sm:w-48 h-2 bg-gray-200 rounded-full overflow-hidden'
+              }, [
+                React.createElement('div', {
+                  className: 'h-full bg-blue-600',
+                  style: {
+                    width: project.progress + '%'
+                  }
+                })
+              ])
+            ])
+          ]);
         })
-      );
-    };
+      ]);
+    }
 
-    // Add state for project list modal
-    const [listModal, setListModal] = React.useState({
-      isOpen: false,
-      type: null,
-      status: null
-    });
-
-    // Add handler for project card clicks
-    const handleItemClick = (type, status) => {
-      setListModal({
-        isOpen: true,
-        type,
-        status
-      });
-    };
-
-    // Add analytics refresh function
-    const refreshAnalytics = React.useCallback(() => {
-      setComponentLoading(true);
-      fetchAnalytics()
-        .then(() => setComponentLoading(false))
-        .catch(error => {
-          console.error('Error refreshing analytics:', error);
-          setComponentLoading(false);
-        });
-    }, [fetchAnalytics]);
-
-    const refreshData = React.useCallback(async (entityType) => {
-      if (!mountedRef.current) return;
-      setComponentLoading(true);
-  
-      try {
-        await fetchAnalytics();
-        showMessage(`${entityType} updated successfully`, 'success');
-      } catch (error) {
-        showMessage(`Error refreshing data: ${error.message}`, 'error');
-      } finally {
-        setComponentLoading(false);
-      }
-    }, [fetchAnalytics, showMessage]);
-
-    // === Content Rendering ===
-    const renderContent = React.useCallback(() => {
-      if (!initialized || loading) return null;
-
-      const props = {
-        showMessage,
-        loading: componentLoading,
-        setLoading: setComponentLoading,
-        analytics: analytics[activeTab] || {},
-        onUpdate: refreshData,  // Add this prop
-        key: activeTab // Add key to force remount on tab change
-      };
-
-      // Map tab names to component names explicitly
-      const componentMap = {
-        customers: 'CustomerManagement',
-        vendors: 'VendorManagement',
-        subcontractors: 'SubcontractorManagement'
-      };
-
-      const componentName = componentMap[activeTab];
-      if (!componentName) {
-        console.error(`No component mapping for tab: ${activeTab}`);
-        return null;
+    // Recent Tasks Component
+    function RecentTasks() {
+      if (!data.tasks.length) {
+        return React.createElement(SharedUI.Card, {
+          className: 'text-center py-8'
+        }, [
+          React.createElement('p', {
+            className: 'text-gray-500'
+          }, 'No recent tasks')
+        ]);
       }
 
-      const Component = window[componentName];
-      if (!Component) {
-        console.error(`Component ${componentName} not found in window object`);
-        return `Loading ${activeTab} component...`;
-      }
+      return React.createElement('div', {
+        className: 'space-y-4'
+      }, [
+        React.createElement('h2', {
+          className: 'text-lg font-semibold'
+        }, 'Recent Tasks'),
+        data.tasks.map(function(task) {
+          return React.createElement(SharedUI.Card, {
+            key: task.id,
+            className: 'hover:shadow-md transition-shadow duration-200'
+          }, [
+            React.createElement('div', {
+              className: 'flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4'
+            }, [
+              React.createElement('div', {
+                className: 'flex-1'
+              }, [
+                React.createElement('div', {
+                  className: 'flex items-center gap-2'
+                }, [
+                  React.createElement('span', {
+                    className: 'text-lg font-semibold'
+                  }, task.title),
+                  React.createElement('span', {
+                    className: [
+                      'px-2',
+                      'py-1',
+                      'text-xs',
+                      'rounded-full',
+                      task.priority === 'high'
+                        ? 'bg-red-100 text-red-800'
+                        : task.priority === 'medium'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-green-100 text-green-800'
+                    ].join(' ')
+                  }, task.priority)
+                ]),
+                React.createElement('p', {
+                  className: 'text-sm text-gray-600'
+                }, 'Project: ' + task.projectName + ' - Due: ' + task.dueDate)
+              ])
+            ])
+          ]);
+        })
+      ]);
+    }
 
-      return React.createElement(Component, props);
-    }, [activeTab, loading, componentLoading, analytics, showMessage, initialized, refreshData]);
+    // Main render
+    return React.createElement('div', { className: 'space-y-6' }, [
+      React.createElement('h2', { 
+        className: 'text-2xl font-bold' 
+      }, 'Dashboard'),
+      
+      error && React.createElement('div', {
+        className: 'bg-red-100 text-red-700 p-4 rounded-lg'
+      }, error),
+      
+      loading && React.createElement(StandardLoadingOverlay),
+      
+      !loading && React.createElement('div', { className: 'space-y-8' }, [
+        React.createElement(MetricsGrid),
+        React.createElement('div', {
+          className: 'grid grid-cols-1 lg:grid-cols-2 gap-6'
+        }, [
+          React.createElement(RecentProjects),
+          React.createElement(RecentTasks)
+        ])
+      ])
+    ]);
+  }
 
-    // === Main Render ===
-    return React.createElement('div', { 
-      className: 'relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4'
-    },
-      (loading || componentLoading) && React.createElement(StandardLoadingOverlay, {
-        message: loading ? 'Loading Dashboard...' : 'Loading Content...'
-      }),
-      React.createElement('div', { className: 'space-y-6' },
-        // Header and message
-        React.createElement('div', { className: 'mb-6' },
-          React.createElement('h2', { 
-            className: 'text-2xl font-bold text-gray-900' 
-          }, 'Management Dashboard'),
-          message.text && React.createElement('div', {
-            className: `mt-4 p-3 rounded ${
-              message.type === 'success' ? 'bg-green-100 text-green-700' :
-              message.type === 'error' ? 'bg-red-100 text-red-700' :
-              'bg-blue-100 text-blue-700'
-            }`
-          }, message.text)
-        ),
-        // Export button
-        React.createElement('div', { className: 'flex justify-end mb-4' },
-          React.createElement('button', {
-            onClick: exportAnalyticsData,
-            className: 'px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700'
-          }, 'Export Analytics')
-        ),
-        // Rest of content
-        renderTabs(),
-        renderAnalytics(),
-        React.createElement('div', { 
-          className: 'mt-6 bg-gray-50 rounded-lg p-4' 
-        }, renderContent())
-      ),
-      React.createElement(ItemListModal, {
-        isOpen: listModal.isOpen,
-        type: listModal.type,
-        status: listModal.status,
-        onClose: () => setListModal({ isOpen: false, type: null, status: null }),
-        onAnalyticsChange: refreshAnalytics // Add this prop
-      })
-    );
-  };
-
-  // Export to global window object
-  window.Dashboard = Dashboard;
+  // Expose the component to the global scope
+  window.DashboardComponent = DashboardComponent;
 })();
 </script>

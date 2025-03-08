@@ -1,87 +1,57 @@
+<?!= include('SharedComponents'); ?>
+
 <script>
 (function() {
-  // === Standardized Loading Overlay ===
-  const StandardLoadingOverlay = ({ message = 'Loading...' }) => {
-    return React.createElement('div', {
-      className: 'absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50'
-    }, 
-      React.createElement('div', { 
-        className: 'text-center flex flex-col items-center justify-center' 
-      },
-        // Spinner SVG
-        React.createElement('svg', {
-          className: 'animate-spin h-10 w-10 text-blue-600 mb-4',
-          xmlns: 'http://www.w3.org/2000/svg',
-          fill: 'none',
-          viewBox: '0 0 24 24'
-        },
-          React.createElement('circle', {
-            className: 'opacity-25',
-            cx: '12',
-            cy: '12',
-            r: '10',
-            stroke: 'currentColor',
-            strokeWidth: '4'
-          }),
-          React.createElement('path', {
-            className: 'opacity-75',
-            fill: 'currentColor',
-            d: 'M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-          })
-        ),
-        // Loading text
-        React.createElement('span', { 
-          className: 'text-lg text-gray-700 font-semibold' 
-        }, message)
-      )
-    );
-  };
-
   // === Standardized Table Component ===
-  const StandardTable = ({ 
-    columns,     // Array of column definitions
-    data,        // Filtered data
-    onRowClick   // Handler for row selection
-  }) => {
+  function StandardTable(props) {
+    var columns = props.columns;
+    var data = props.data;
+    var onRowClick = props.onRowClick;
+
     return React.createElement('div', { className: 'bg-white rounded-lg shadow overflow-hidden' },
-      React.createElement('table', { className: 'min-w-full divide-y divide-gray-200' },
-        // Table Header
-        React.createElement('thead', { className: 'bg-gray-50' },
-          React.createElement('tr', null,
-            columns.map(col => 
+      React.createElement('table', { className: 'w-full' }, [
+        React.createElement('thead', { key: 'thead' }, 
+          React.createElement('tr', { key: 'header-row' }, 
+            columns.map((column, index) => 
               React.createElement('th', {
-                key: col.key,
-                className: 'px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'
-              }, col.label)
+                key: `header-${index}`,
+                className: 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'
+              }, column.header || column.label)
             )
           )
         ),
-        // Table Body
-        React.createElement('tbody', { className: 'bg-white divide-y divide-gray-200' },
-          data.map(item => 
-            React.createElement('tr', { 
-              key: item.subId,
-              onClick: () => onRowClick(item),
-              className: 'hover:bg-gray-50 cursor-pointer'
-            },
-              columns.map(col => 
+        React.createElement('tbody', { key: 'tbody' }, 
+          data.map((row, rowIndex) => 
+            React.createElement('tr', {
+              key: `row-${rowIndex}`,
+              onClick: onRowClick ? () => onRowClick(row) : undefined,
+              className: onRowClick ? 'cursor-pointer hover:bg-gray-50' : ''
+            }, 
+              columns.map((column, colIndex) => 
                 React.createElement('td', {
-                  key: col.key,
-                  className: 'px-3 py-2 whitespace-nowrap text-sm text-gray-900'
+                  key: `cell-${rowIndex}-${colIndex}`,
+                  className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
                 }, 
-                  col.render ? col.render(item) : (item[col.key] || 'N/A')
+                  // Handle different column property patterns
+                  column.cell ? column.cell(row) : 
+                  column.render ? column.render(row) : 
+                  row[column.key] || ''
                 )
               )
             )
           )
         )
-      )
+      ])
     );
-  };
+  }
 
   // === Create Subcontractor Form Component ===
-  const CreateSubcontractorForm = ({ onSubmit, onCancel }) => {
-    const [formData, setFormData] = React.useState({
+  function CreateSubcontractorForm(props) {
+    var onSubmit = props.onSubmit;
+    var onCancel = props.onCancel;
+    var useState = React.useState;
+    
+    var formDataState = useState({
       subName: '',
       address: '',
       city: '',
@@ -90,49 +60,92 @@
       contactEmail: '',
       phone: ''
     });
+    var formData = formDataState[0];
+    var setFormData = formDataState[1];
 
-    const handleSubmit = (e) => {
+    var errorState = useState(null);
+    var error = errorState[0];
+    var setError = errorState[1];
+    
+    var constantsState = useState(null);
+    var constants = constantsState[0];
+    var setConstants = constantsState[1];
+    
+    React.useEffect(function() {
+      loadConstants();
+    }, []);
+    
+    function loadConstants() {
+      google.script.run
+        .withSuccessHandler(function(result) {
+          setConstants(result);
+        })
+        .withFailureHandler(function(err) {
+          setError(err.message || 'Error loading constants');
+        })
+        .getClientConstants();
+    }
+
+    function handleSubmit(e) {
       e.preventDefault();
-      if (!formData.subName.trim()) return;
+      if (!formData.subName.trim()) {
+        setError('Subcontractor name is required');
+        return;
+      }
       onSubmit(formData);
-    };
+    }
 
     // Phone number formatter
-    const formatPhoneNumber = (value) => {
-      const cleaned = value.replace(/\D/g, '');
+    function formatPhoneNumber(value) {
+      var cleaned = value.replace(/\D/g, '');
       if (cleaned.length >= 10) {
-        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6,10)}`;
+        return '(' + cleaned.slice(0,3) + ') ' + cleaned.slice(3,6) + '-' + cleaned.slice(6,10);
       } else if (cleaned.length > 6) {
-        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
+        return '(' + cleaned.slice(0,3) + ') ' + cleaned.slice(3,6) + '-' + cleaned.slice(6);
       } else if (cleaned.length > 3) {
-        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3)}`;
+        return '(' + cleaned.slice(0,3) + ') ' + cleaned.slice(3);
       } else if (cleaned.length > 0) {
-        return `(${cleaned}`;
+        return '(' + cleaned;
       }
       return cleaned;
-    };
+    }
 
-    return React.createElement('div', { className: 'space-y-4 bg-white p-6 rounded-lg shadow' },
+    return React.createElement('div', { className: 'space-y-4 bg-white p-6 rounded-lg shadow' }, [
       React.createElement('h3', { className: 'text-lg font-semibold' }, 'Create New Subcontractor'),
-      React.createElement('form', { onSubmit: handleSubmit, className: 'space-y-4' },
+      error && React.createElement('div', { 
+        className: 'text-red-500 text-sm p-2 bg-red-50 rounded'
+      }, error),
+      React.createElement('form', { onSubmit: handleSubmit, className: 'space-y-4' }, [
         // Subcontractor Name (required)
-        React.createElement('div', null,
+        React.createElement('div', null, [
           React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Subcontractor Name *'),
           React.createElement('input', {
             type: 'text',
             required: true,
             value: formData.subName,
-            onChange: e => setFormData(prev => ({ ...prev, subName: e.target.value })),
+            onChange: function(e) {
+              setFormData(function(prev) {
+                var newData = Object.assign({}, prev);
+                newData.subName = e.target.value;
+                return newData;
+              });
+            },
             className: 'w-full p-2 border rounded'
           })
-        ),
+        ]),
         // Address
         React.createElement('div', null,
           React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Address'),
           React.createElement('input', {
             type: 'text',
             value: formData.address,
-            onChange: e => setFormData(prev => ({ ...prev, address: e.target.value })),
+            onChange: function(e) {
+              setFormData(function(prev) {
+                var newData = Object.assign({}, prev);
+                newData.address = e.target.value;
+                return newData;
+              });
+            },
             className: 'w-full p-2 border rounded'
           })
         ),
@@ -143,17 +156,29 @@
             React.createElement('input', {
               type: 'text',
               value: formData.city,
-              onChange: e => setFormData(prev => ({ ...prev, city: e.target.value })),
+              onChange: function(e) {
+                setFormData(function(prev) {
+                  var newData = Object.assign({}, prev);
+                  newData.city = e.target.value;
+                  return newData;
+                });
+              },
               className: 'w-full p-2 border rounded'
             })
           ),
           React.createElement('div', null,
             React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'State'),
-            React.createElement('input', {
-              type: 'text',
-              maxLength: 2,
+            React.createElement(SharedUI.Select, {
               value: formData.state,
-              onChange: e => setFormData(prev => ({ ...prev, state: e.target.value.toUpperCase() })),
+              onChange: function(e) {
+                setFormData(function(prev) {
+                  var newData = Object.assign({}, prev);
+                  newData.state = e.target.value;
+                  return newData;
+                });
+              },
+              options: constants?.US_STATES || [],
+              placeholder: 'Select state',
               className: 'w-full p-2 border rounded'
             })
           ),
@@ -163,10 +188,13 @@
               type: 'text',
               maxLength: 5,
               value: formData.zip,
-              onChange: e => setFormData(prev => ({ 
-                ...prev, 
-                zip: e.target.value.replace(/\D/g, '').slice(0, 5)
-              })),
+              onChange: function(e) {
+                setFormData(function(prev) {
+                  var newData = Object.assign({}, prev);
+                  newData.zip = e.target.value.replace(/\D/g, '').slice(0, 5);
+                  return newData;
+                });
+              },
               className: 'w-full p-2 border rounded'
             })
           )
@@ -178,10 +206,14 @@
             React.createElement('input', {
               type: 'tel',
               value: formData.phone,
-              onChange: e => setFormData(prev => ({ 
-                ...prev, 
-                phone: formatPhoneNumber(e.target.value)
-              })),
+              onChange: function(e) {
+                var formatted = formatPhoneNumber(e.target.value);
+                setFormData(function(prev) {
+                  var newData = Object.assign({}, prev);
+                  newData.phone = formatted;
+                  return newData;
+                });
+              },
               className: 'w-full p-2 border rounded'
             })
           ),
@@ -190,13 +222,19 @@
             React.createElement('input', {
               type: 'email',
               value: formData.contactEmail,
-              onChange: e => setFormData(prev => ({ ...prev, contactEmail: e.target.value })),
+              onChange: function(e) {
+                setFormData(function(prev) {
+                  var newData = Object.assign({}, prev);
+                  newData.contactEmail = e.target.value;
+                  return newData;
+                });
+              },
               className: 'w-full p-2 border rounded'
             })
           )
         ),
         // Buttons
-        React.createElement('div', { className: 'flex justify-end space-x-4 pt-4' },
+        React.createElement('div', { className: 'flex justify-end space-x-4 pt-4' }, [
           React.createElement('button', {
             type: 'button',
             onClick: onCancel,
@@ -206,15 +244,24 @@
             type: 'submit',
             className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700'
           }, 'Create Subcontractor')
-        )
-      )
-    );
-  };
+        ])
+      ])
+    ]);
+  }
 
   // === Edit Subcontractor Form Component ===
   const EditSubcontractorForm = ({ subcontractor, onSubmit, onCancel }) => {
+    console.log('Rendering EditSubcontractorForm with subcontractor:', subcontractor);
+    
+    if (!subcontractor) {
+      console.error('EditSubcontractorForm called with no subcontractor data');
+      return React.createElement('div', { className: 'p-4 bg-red-100 text-red-700 rounded' }, 
+        'Error: No subcontractor data available'
+      );
+    }
+
     const [formData, setFormData] = React.useState({
-      subId: subcontractor.subId,
+      subId: subcontractor.subId || '',
       subName: subcontractor.subName || '',
       address: subcontractor.address || '',
       city: subcontractor.city || '',
@@ -344,429 +391,712 @@
   };
 
   // === Main SubcontractorManagement Component ===
-  const SubcontractorManagement = ({ showMessage, loading: parentLoading, setLoading: setParentLoading, onUpdate }) => {
-    // Remove local loading state, use parent's exclusively
-    const setLoading = setParentLoading;
-    const mountedRef = React.useRef(true);
-
-    // State management
+  const SubcontractorManagementComponent = () => {
     const [subcontractors, setSubcontractors] = React.useState([]);
-    const [filteredSubcontractors, setFilteredSubcontractors] = React.useState([]);
+    const [loading, setLoading] = React.useState(true);
+    const [error, setError] = React.useState(null);
     const [selectedSubcontractor, setSelectedSubcontractor] = React.useState(null);
-    const [viewMode, setViewMode] = React.useState('list');
-    const [isCreating, setIsCreating] = React.useState(false);
-    const [isEditing, setIsEditing] = React.useState(false);
-    const [searchTerm, setSearchTerm] = React.useState('');
-    const [statusFilter, setStatusFilter] = React.useState('All');
+    const [showForm, setShowForm] = React.useState(false);
+    const [showSummary, setShowSummary] = React.useState(false);
+    const [formData, setFormData] = React.useState({
+      name: '',
+      contact: '',
+      email: '',
+      phone: '',
+      specialties: '',
+      status: 'ACTIVE' // Default status
+    });
+    const [constants, setConstants] = React.useState(null);
 
-    // === Data Fetching with Better Error Handling ===
-    const fetchSubcontractors = React.useCallback(() => {
-      if (!mountedRef.current) return;
-      setLoading(true);
-
-      return new Promise((resolve, reject) => {
-        google.script.run
-          .withSuccessHandler(response => {
-            if (!mountedRef.current) return;
-            if (response && response.success) {
-              setSubcontractors(response.data || []);
-              setFilteredSubcontractors(response.data || []);
-              resolve(response.data);
-            } else {
-              const error = response?.error || 'Failed to load subcontractors';
-              showMessage(error, 'error');
-              reject(new Error(error));
-            }
-            setLoading(false);
-          })
-          .withFailureHandler(error => {
-            if (!mountedRef.current) return;
-            console.error('Error fetching subcontractors:', error);
-            showMessage('Failed to load subcontractors', 'error');
-            setLoading(false);
-            reject(error);
-          })
-          .getSubcontractorsForClient();
-      });
-    }, [setLoading, showMessage]);
-
-    // Cleanup on unmount
+    // Load subcontractors and constants on mount
     React.useEffect(() => {
-      return () => {
-        mountedRef.current = false;
-      };
+      loadSubcontractors();
+      loadConstants();
     }, []);
 
-    // Initial fetch with error boundary
-    React.useEffect(() => {
-      fetchSubcontractors().catch(error => {
-        console.error('Error in initial subcontractor fetch:', error);
+    const loadSubcontractors = () => {
+      setLoading(true);
+      google.script.run
+        .withSuccessHandler(handleSubcontractorsLoaded)
+        .withFailureHandler(handleError)
+        .getSubcontractors();
+    };
+
+    const loadConstants = () => {
+      google.script.run
+        .withSuccessHandler(handleConstantsLoaded)
+        .withFailureHandler(handleError)
+        .getClientConstants();
+    };
+
+    const handleConstantsLoaded = (result) => {
+      setConstants(result);
+    };
+
+    const handleSubcontractorsLoaded = (result) => {
+      setSubcontractors(result || []);
+      setLoading(false);
+    };
+
+    const handleError = (error) => {
+      setError(error.message || 'An error occurred');
+      setLoading(false);
+    };
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      setLoading(true);
+
+      const subcontractorData = selectedSubcontractor 
+        ? { ...formData, id: selectedSubcontractor.id }
+        : formData;
+
+      google.script.run
+        .withSuccessHandler(() => {
+          loadSubcontractors();
+          setShowForm(false);
+          setSelectedSubcontractor(null);
+          setFormData({
+            name: '',
+            contact: '',
+            email: '',
+            phone: '',
+            specialties: '',
+            status: 'ACTIVE'
+          });
+        })
+        .withFailureHandler(handleError)
+        [selectedSubcontractor ? 'updateSubcontractor' : 'createSubcontractor'](subcontractorData);
+    };
+
+    const handleEdit = (subcontractor) => {
+      setSelectedSubcontractor(subcontractor);
+      setFormData({
+        name: subcontractor.subName || '',
+        contact: subcontractor.contactPerson || '',
+        email: subcontractor.contactEmail || '',
+        phone: subcontractor.phone || '',
+        specialties: subcontractor.specialties || '',
+        status: subcontractor.status || 'ACTIVE'
       });
-    }, [fetchSubcontractors]);
+      setShowForm(true);
+      setShowSummary(false);
+    };
 
-    // === Search and Filter Effect ===
-    React.useEffect(() => {
-      let filtered = [...subcontractors];
+    const handleRowClick = (subcontractor) => {
+      setSelectedSubcontractor(subcontractor);
+      setShowSummary(true);
+      setShowForm(false);
+    };
+
+    const handleDelete = (subcontractorId) => {
+      if (!confirm('Are you sure you want to delete this subcontractor?')) return;
       
-      if (searchTerm.trim()) {
-        const searchLower = searchTerm.toLowerCase();
-        filtered = filtered.filter(sub => 
-          sub.subName.toLowerCase().includes(searchLower) ||
-          sub.subId.toLowerCase().includes(searchLower) ||
-          sub.contactEmail?.toLowerCase().includes(searchLower) ||
-          sub.phone?.includes(searchTerm)
-        );
-      }
-
-      if (statusFilter !== 'All') {
-        filtered = filtered.filter(sub => sub.status === statusFilter);
-      }
-
-      setFilteredSubcontractors(filtered);
-    }, [searchTerm, statusFilter, subcontractors]);
-
-    // === Handlers ===
-    const handleCreateSubcontractor = async (formData) => {
       setLoading(true);
+      google.script.run
+        .withSuccessHandler(loadSubcontractors)
+        .withFailureHandler(handleError)
+        .deleteSubcontractor(subcontractorId);
+    };
+
+    // New Subcontractor Summary Component
+    const SubcontractorSummary = () => {
+      if (!selectedSubcontractor) return null;
       
-      try {
-        const cleanedData = {
-          subName: formData.subName.trim(),
-          address: formData.address.trim(),
-          city: formData.city.trim(),
-          state: formData.state.trim(),
-          zip: formData.zip.trim(),
-          contactEmail: formData.contactEmail.trim(),
-          phone: formatPhoneNumber(formData.phone)
-        };
+      const [details, setDetails] = React.useState(null);
+      const [isLoading, setIsLoading] = React.useState(true);
+      const [error, setError] = React.useState(null);
+      
+      // Simple formatCurrency function to use locally
+      const formatCurrency = (amount) => {
+        if (!amount && amount !== 0) return '$0.00';
+        return new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: 'USD',
+        }).format(amount);
+      };
+      
+      React.useEffect(() => {
+        // Remove the formatCurrency server call since we don't need it
+        
+        // Just load subcontractor details
+        setIsLoading(true);
+        google.script.run
+          .withSuccessHandler((result) => {
+            if (result.success) {
+              setDetails(result.data);
+            } else {
+              setError(result.error || 'Failed to load subcontractor details');
+            }
+            setIsLoading(false);
+          })
+          .withFailureHandler((err) => {
+            setError(err.message || 'An error occurred');
+            setIsLoading(false);
+          })
+          .getSubcontractorDetailsForClient(selectedSubcontractor.subId);
+      }, [selectedSubcontractor.subId]);
 
-        const response = await new Promise((resolve, reject) => {
-          google.script.run
-            .withSuccessHandler(result => {
-              if (result === null) {
-                // Handle null response by fetching latest subcontractors
-                google.script.run
-                  .withSuccessHandler(subcontractorsResult => {
-                    if (subcontractorsResult && subcontractorsResult.success) {
-                      // Find our newly created subcontractor
-                      const foundSubcontractor = subcontractorsResult.data.find(s => 
-                        s.subName === cleanedData.subName &&
-                        s.address === cleanedData.address
-                      );
-                      if (foundSubcontractor) {
-                        resolve({ success: true, data: foundSubcontractor });
-                      } else {
-                        reject(new Error('Could not verify subcontractor creation'));
-                      }
-                    } else {
-                      reject(new Error('Failed to verify subcontractor creation'));
-                    }
-                  })
-                  .withFailureHandler(error => reject(error))
-                  .getSubcontractorsForClient();
-              } else if (result && result.success) {
-                resolve(result);
-              } else {
-                reject(new Error(result?.error || 'Server returned unsuccessful response'));
-              }
-            })
-            .withFailureHandler(error => {
-              console.error('Server error:', error);
-              reject(new Error(error.message || 'Failed to create subcontractor'));
-            })
-            .createSubcontractor(cleanedData);
-        });
-
-        if (response.success) {
-          showMessage('Subcontractor created successfully', 'success');
-          setIsCreating(false);
-          fetchSubcontractors(); // Refresh list
-        } else {
-          throw new Error(response.error || 'Failed to create subcontractor');
-        }
-      } catch (error) {
-        console.error('Error creating subcontractor:', error);
-        showMessage(error.message || 'Error creating subcontractor', 'error');
-      } finally {
-        setLoading(false);
+      if (isLoading) {
+        return React.createElement('div', { 
+          key: 'loading-container',
+          className: 'text-center py-8' 
+        }, 'Loading details...');
       }
-    };
 
-    const handleUpdateSubcontractor = async (formData) => {
-      setLoading(true);
-      try {
-        const response = await new Promise((resolve, reject) => {
-          google.script.run
-            .withSuccessHandler(resolve)
-            .withFailureHandler(reject)
-            .updateSubcontractor(formData);
-        });
-
-        if (response.success) {
-          showMessage('Subcontractor updated successfully', 'success');
-          setIsEditing(false);
-          fetchSubcontractors();
-          if (onUpdate) onUpdate('subcontractor');
-        } else {
-          throw new Error(response.error || 'Failed to update subcontractor');
-        }
-      } catch (error) {
-        console.error('Error updating subcontractor:', error);
-        showMessage(error.message || 'Error updating subcontractor', 'error');
-      } finally {
-        setLoading(false);
+      if (error) {
+        return React.createElement('div', { 
+          key: 'error-container',
+          className: 'text-red-600 py-4' 
+        }, error);
       }
-    };
 
-    // Phone number formatter
-    const formatPhoneNumber = (value) => {
-      const cleaned = value.replace(/\D/g, '');
-      if (cleaned.length >= 10) {
-        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6,10)}`;
-      } else if (cleaned.length > 6) {
-        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
-      } else if (cleaned.length > 3) {
-        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3)}`;
-      } else if (cleaned.length > 0) {
-        return `(${cleaned}`;
+      if (!details) {
+        return React.createElement('div', { 
+          key: 'no-details-container',
+          className: 'text-gray-500 py-4' 
+        }, 'No details available');
       }
-      return cleaned;
-    };
 
-    // === Export Functionality ===
-    const exportSubcontractorData = () => {
-      const exportData = filteredSubcontractors.map(sub => ({
-        'Subcontractor ID': sub.subId,
-        'Name': sub.subName,
-        'Email': sub.contactEmail,
-        'Phone': sub.phone,
-        'Total Projects': sub.metrics?.totalProjects || 0,
-        'Active Projects': sub.metrics?.activeProjects || 0,
-        'Total Revenue': sub.metrics?.totalRevenue || 0,
-        'Status': sub.status || 'N/A'
-      }));
-
-      // Convert to CSV
-      const headers = Object.keys(exportData[0]);
-      const csvContent = [
-        headers.join(','),
-        ...exportData.map(row => 
-          headers.map(header => 
-            JSON.stringify(row[header] || '')
-          ).join(',')
-        )
-      ].join('\n');
-
-      // Create download link
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', `subcontractor_data_${new Date().toISOString()}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-    };
-
-    // === Render Methods ===
-    const renderHeader = () => {
       return React.createElement('div', { 
-        className: 'flex flex-col sm:flex-row justify-between items-center gap-4 mb-6' 
-      },
-        React.createElement('h2', { 
-          className: 'text-xl sm:text-2xl font-bold text-gray-900' 
-        }, 'Subcontractor Management'),
-        React.createElement('button', {
-          onClick: () => setIsCreating(true),
-          className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700'
-        }, 'Add New Subcontractor')
-      );
+        key: 'summary-container',
+        className: 'bg-white rounded-lg shadow p-6 space-y-6' 
+      }, [
+        // Header with actions
+        React.createElement('div', { 
+          key: 'header',
+          className: 'flex justify-between items-center border-b pb-4' 
+        }, [
+          React.createElement('h3', { 
+            key: 'title',
+            className: 'text-xl font-semibold' 
+          }, details.subName || 'Subcontractor Details'),
+          React.createElement('div', { 
+            key: 'actions',
+            className: 'flex space-x-3' 
+          }, [
+            React.createElement('button', {
+              key: 'edit-btn',
+              onClick: () => handleEdit(selectedSubcontractor),
+              className: 'px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700'
+            }, 'Edit'),
+            React.createElement('button', {
+              key: 'close-btn',
+              onClick: () => setShowSummary(false),
+              className: 'px-3 py-1 border rounded hover:bg-gray-50'
+            }, 'Close')
+          ])
+        ]),
+        
+        // Main content - 2 columns on larger screens
+        React.createElement('div', { 
+          key: 'content',
+          className: 'grid grid-cols-1 md:grid-cols-2 gap-6' 
+        }, [
+          // Left column - Contact info
+          React.createElement('div', { key: 'contact-info' }, [
+            React.createElement('h4', { 
+              key: 'contact-header',
+              className: 'font-medium text-gray-700 mb-3' 
+            }, 'Contact Information'),
+            
+            React.createElement('div', { 
+              key: 'contact-details',
+              className: 'space-y-2' 
+            }, [
+              details.subId && React.createElement('div', { 
+                key: 'sub-id-row',
+                className: 'flex items-start' 
+              }, [
+                React.createElement('div', { 
+                  key: 'sub-id-label',
+                  className: 'text-gray-500 w-24' 
+                }, 'Sub ID:'),
+                React.createElement('div', { 
+                  key: 'sub-id-value',
+                  className: 'font-mono' 
+                }, details.subId)
+              ]),
+              
+              details.contactEmail && React.createElement('div', { 
+                key: 'email-row',
+                className: 'flex items-start' 
+              }, [
+                React.createElement('div', { 
+                  key: 'email-label',
+                  className: 'text-gray-500 w-24' 
+                }, 'Email:'),
+                React.createElement('div', { key: 'email-value' }, details.contactEmail)
+              ]),
+              
+              details.phone && React.createElement('div', { 
+                key: 'phone-row',
+                className: 'flex items-start' 
+              }, [
+                React.createElement('div', { 
+                  key: 'phone-label',
+                  className: 'text-gray-500 w-24' 
+                }, 'Phone:'),
+                React.createElement('div', { key: 'phone-value' }, details.phone)
+              ]),
+              
+              React.createElement('div', { 
+                key: 'address-row',
+                className: 'flex items-start' 
+              }, [
+                React.createElement('div', { 
+                  key: 'address-label',
+                  className: 'text-gray-500 w-24' 
+                }, 'Address:'),
+                React.createElement('div', { key: 'address-container' }, [
+                  details.address && React.createElement('div', { 
+                    key: 'address-line' 
+                  }, details.address),
+                  (details.city || details.state || details.zip) && 
+                  React.createElement('div', { 
+                    key: 'city-state-zip' 
+                  }, [
+                    details.city || '',
+                    details.state ? `, ${details.state}` : '',
+                    details.zip ? ` ${details.zip}` : ''
+                  ].join(''))
+                ])
+              ])
+            ])
+          ]),
+          
+          // Right column - Statistics
+          React.createElement('div', { key: 'statistics' }, [
+            React.createElement('h4', { 
+              key: 'stats-header',
+              className: 'font-medium text-gray-700 mb-3' 
+            }, 'Activity Summary'),
+            
+            React.createElement('div', { 
+              key: 'stats-grid',
+              className: 'grid grid-cols-2 gap-4' 
+            }, [
+              // Invoice Count
+              React.createElement('div', { 
+                key: 'invoice-count',
+                className: 'bg-gray-50 p-3 rounded' 
+              }, [
+                React.createElement('div', { 
+                  key: 'invoice-count-label',
+                  className: 'text-sm text-gray-500' 
+                }, 'Total Invoices'),
+                React.createElement('div', { 
+                  key: 'invoice-count-value',
+                  className: 'text-xl font-semibold' 
+                }, details.metrics.invoiceCount)
+              ]),
+              
+              // Total Amount
+              React.createElement('div', { 
+                key: 'total-amount',
+                className: 'bg-gray-50 p-3 rounded' 
+              }, [
+                React.createElement('div', { 
+                  key: 'total-amount-label',
+                  className: 'text-sm text-gray-500' 
+                }, 'Total Invoiced'),
+                React.createElement('div', { 
+                  key: 'total-amount-value',
+                  className: 'text-xl font-semibold' 
+                }, formatCurrency(details.metrics.totalInvoiced))
+              ]),
+              
+              // Active Projects
+              React.createElement('div', { 
+                key: 'active-projects',
+                className: 'bg-gray-50 p-3 rounded' 
+              }, [
+                React.createElement('div', { 
+                  key: 'active-projects-label',
+                  className: 'text-sm text-gray-500' 
+                }, 'Active Projects'),
+                React.createElement('div', { 
+                  key: 'active-projects-value',
+                  className: 'text-xl font-semibold' 
+                }, details.metrics.activeProjects)
+              ]),
+              
+              // Completed Projects
+              React.createElement('div', { 
+                key: 'completed-projects',
+                className: 'bg-gray-50 p-3 rounded' 
+              }, [
+                React.createElement('div', { 
+                  key: 'completed-projects-label',
+                  className: 'text-sm text-gray-500' 
+                }, 'Completed Projects'),
+                React.createElement('div', { 
+                  key: 'completed-projects-value',
+                  className: 'text-xl font-semibold' 
+                }, details.metrics.completedProjects)
+              ])
+            ])
+          ])
+        ]),
+        
+        // Recent Invoices Section
+        React.createElement('div', { key: 'recent-invoices', className: 'pt-4 border-t' }, [
+          React.createElement('h4', { 
+            key: 'recent-invoices-title',
+            className: 'font-medium text-gray-700 mb-3' 
+          }, 'Recent Invoices'),
+          
+          details.recentInvoices.length === 0 ?
+            React.createElement('div', { 
+              key: 'no-invoices',
+              className: 'text-gray-500 py-4' 
+            }, 'No recent invoices found.') :
+            React.createElement('div', { 
+              key: 'invoices-table-container',
+              className: 'overflow-x-auto' 
+            }, 
+              React.createElement('table', { 
+                key: 'invoices-table',
+                className: 'min-w-full' 
+              }, [
+                React.createElement('thead', { key: 'thead' },
+                  React.createElement('tr', { key: 'header-row', className: 'bg-gray-50' }, [
+                    React.createElement('th', { key: 'date-header', className: 'px-4 py-2 text-left text-xs font-medium text-gray-500' }, 'Date'),
+                    React.createElement('th', { key: 'project-header', className: 'px-4 py-2 text-left text-xs font-medium text-gray-500' }, 'Project'),
+                    React.createElement('th', { key: 'amount-header', className: 'px-4 py-2 text-left text-xs font-medium text-gray-500' }, 'Amount'),
+                    React.createElement('th', { key: 'status-header', className: 'px-4 py-2 text-left text-xs font-medium text-gray-500' }, 'Status')
+                  ])
+                ),
+                React.createElement('tbody', { key: 'tbody' },
+                  details.recentInvoices.map((invoice, index) => 
+                    React.createElement('tr', { 
+                      key: `invoice-row-${invoice.date}-${index}`,
+                      className: index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                    }, [
+                      React.createElement('td', { key: `date-${index}`, className: 'px-4 py-2' }, 
+                        new Date(invoice.date).toLocaleDateString()
+                      ),
+                      React.createElement('td', { key: `project-${index}`, className: 'px-4 py-2' }, 
+                        details.projects.find(p => p.projectId === invoice.projectId)?.name || invoice.projectId
+                      ),
+                      React.createElement('td', { key: `amount-${index}`, className: 'px-4 py-2' }, 
+                        formatCurrency(invoice.amount)
+                      ),
+                      React.createElement('td', { key: `status-${index}`, className: 'px-4 py-2' }, 
+                        invoice.status
+                      )
+                    ])
+                  )
+                )
+              ])
+            )
+        ])
+      ]);
     };
 
-    const renderControls = () => {
-      return React.createElement('div', { className: 'flex flex-col sm:flex-row justify-between gap-4 mb-6' },
-        // Search and filters group
-        React.createElement('div', { className: 'flex flex-col sm:flex-row gap-4' },
+    // Subcontractor Form Component
+    const SubcontractorForm = () => {
+      // Format phone number as user types
+      const handlePhoneChange = (e) => {
+        const value = e.target.value;
+        // Remove non-numeric characters
+        const cleaned = value.replace(/\D/g, '');
+        
+        let formatted = '';
+        if (cleaned.length > 0) {
+          if (cleaned.length <= 3) {
+            formatted = `(${cleaned}`;
+          } else if (cleaned.length <= 6) {
+            formatted = `(${cleaned.slice(0, 3)}) ${cleaned.slice(3)}`;
+          } else {
+            formatted = `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`;
+          }
+        }
+        
+        setFormData(prev => ({ ...prev, phone: formatted }));
+      };
+
+      return React.createElement('form', {
+        onSubmit: handleSubmit,
+        className: 'space-y-4'
+      }, [
+        React.createElement(SharedUI.Input, {
+          key: 'name',
+          label: 'Subcontractor Name',
+          value: formData.name,
+          onChange: (e) => setFormData(prev => ({ ...prev, name: e.target.value })),
+          required: true
+        }),
+        React.createElement(SharedUI.Input, {
+          key: 'contact',
+          label: 'Contact Person',
+          value: formData.contact,
+          onChange: (e) => setFormData(prev => ({ ...prev, contact: e.target.value }))
+        }),
+        React.createElement(SharedUI.Input, {
+          key: 'email',
+          label: 'Email',
+          type: 'email',
+          value: formData.email,
+          onChange: (e) => setFormData(prev => ({ ...prev, email: e.target.value }))
+        }),
+        React.createElement(SharedUI.Input, {
+          key: 'phone',
+          label: 'Phone',
+          type: 'tel',
+          value: formData.phone,
+          onChange: handlePhoneChange
+        }),
+        React.createElement(SharedUI.Input, {
+          key: 'specialties',
+          label: 'Specialties',
+          value: formData.specialties,
+          onChange: (e) => setFormData(prev => ({ ...prev, specialties: e.target.value }))
+        }),
+        React.createElement(SharedUI.Select, {
+          key: 'status',
+          label: 'Status',
+          value: formData.status,
+          onChange: (e) => setFormData(prev => ({ ...prev, status: e.target.value })),
+          options: constants?.SUBCONTRACTOR_STATUSES ? 
+            Object.entries(constants.SUBCONTRACTOR_STATUSES).map(([_, value]) => value) : 
+            ['ACTIVE', 'INACTIVE', 'PENDING', 'ARCHIVED'],
+          required: true
+        }),
+        React.createElement('div', {
+          key: 'buttons',
+          className: 'flex flex-col sm:flex-row gap-4'
+        }, [
+          React.createElement(SharedUI.Button, {
+            key: 'submit',
+            text: selectedSubcontractor ? 'Update Subcontractor' : 'Add Subcontractor',
+            type: 'submit'
+          }),
+          React.createElement(SharedUI.Button, {
+            key: 'cancel',
+            text: 'Cancel',
+            variant: 'secondary',
+            onClick: () => {
+              setShowForm(false);
+              setSelectedSubcontractor(null);
+            }
+          })
+        ])
+      ]);
+    };
+
+    // Subcontractor List Component
+    const SubcontractorList = () => {
+      // Add state for filtered subcontractors
+      const [filteredSubcontractors, setFilteredSubcontractors] = React.useState(subcontractors);
+      const [searchTerm, setSearchTerm] = React.useState('');
+      
+      // Update filtered subcontractors when search term or subcontractors change
+      React.useEffect(() => {
+        if (searchTerm.trim()) {
+          const term = searchTerm.toLowerCase();
+          setFilteredSubcontractors(
+            subcontractors.filter(subcontractor => 
+              (subcontractor.subName && subcontractor.subName.toLowerCase().includes(term)) ||
+              (subcontractor.contactEmail && subcontractor.contactEmail.toLowerCase().includes(term)) ||
+              (subcontractor.phone && subcontractor.phone.includes(searchTerm)) ||
+              (subcontractor.address && subcontractor.address.toLowerCase().includes(term))
+            )
+          );
+        } else {
+          setFilteredSubcontractors(subcontractors);
+        }
+      }, [searchTerm, subcontractors]);
+      
+      if (!subcontractors.length) {
+        return React.createElement(SharedUI.Card, {
+          className: 'text-center py-8'
+        }, [
+          React.createElement('p', {
+            key: 'no-subcontractors-text',
+            className: 'text-gray-500'
+          }, 'No subcontractors found'),
+          React.createElement(SharedUI.Button, {
+            key: 'add-button',
+            text: 'Add Subcontractor',
+            onClick: () => setShowForm(true),
+            className: 'mt-4 max-w-xs mx-auto'
+          })
+        ]);
+      }
+
+      return React.createElement('div', {
+        key: 'subcontractor-list-container',
+        className: 'space-y-6'
+      }, [
+        // Controls row
+        React.createElement('div', { 
+          key: 'controls-row',
+          className: 'flex flex-col sm:flex-row justify-between items-center gap-4 mb-6' 
+        }, [
           React.createElement('input', {
+            key: 'search-input',
             type: 'text',
             placeholder: 'Search subcontractors...',
+            className: 'p-2 border rounded w-full sm:w-64',
             value: searchTerm,
-            onChange: e => setSearchTerm(e.target.value),
-            className: 'p-2 border rounded w-full sm:w-64'
+            onChange: (e) => setSearchTerm(e.target.value)
           }),
-          React.createElement('select', {
-            value: statusFilter,
-            onChange: e => setStatusFilter(e.target.value),
-            className: 'p-2 border rounded w-full sm:w-auto'
-          },
-            React.createElement('option', { value: 'All' }, 'All Statuses'),
-            React.createElement('option', { value: 'Active' }, 'Active'),
-            React.createElement('option', { value: 'Inactive' }, 'Inactive')
+          React.createElement(SharedUI.Button, {
+            key: 'add-new-button',
+            text: 'Add New Subcontractor',
+            onClick: () => setShowForm(true)
+          })
+        ]),
+        
+        // Export button
+        React.createElement('div', { 
+          key: 'export-button-container',
+          className: 'flex justify-end mb-4' 
+        },
+          React.createElement('button', {
+            key: 'export-button',
+            onClick: () => {
+              // Simple CSV export
+              const exportData = filteredSubcontractors.map(c => ({
+                'Name': c.subName || '',
+                'Email': c.contactEmail || '',
+                'Phone': c.phone || '',
+                'Address': c.address || '',
+                'City': c.city || '',
+                'State': c.state || '',
+                'Zip': c.zip || '',
+                'Status': c.status || ''
+              }));
+              
+              if (exportData.length === 0) {
+                alert('No data to export');
+                return;
+              }
+              
+              const headers = Object.keys(exportData[0]);
+              const csvContent = [
+                headers.join(','),
+                ...exportData.map(row => 
+                  headers.map(header => 
+                    JSON.stringify(row[header] || '')
+                  ).join(',')
+                )
+              ].join('\n');
+              
+              const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+              const link = document.createElement('a');
+              if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', `subcontractor_data_${new Date().toISOString()}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }
+            },
+            className: 'px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700'
+          }, 'Export CSV')
+        ),
+        
+        // Subcontractor cards container
+        React.createElement('div', { 
+          key: 'subcontractor-cards',
+          className: 'space-y-4' 
+        },
+          filteredSubcontractors.map((subcontractor, index) => 
+            React.createElement('div', {
+              key: `subcontractor-card-${index}`,
+              className: 'bg-white rounded-lg shadow p-4 cursor-pointer hover:shadow-md transition-shadow duration-200',
+              onClick: () => handleRowClick(subcontractor)
+            }, [
+              React.createElement('div', { 
+                key: 'card-content',
+                className: 'flex flex-col md:flex-row justify-between items-start md:items-center'
+              }, [
+                // Left side - Subcontractor info
+                React.createElement('div', { key: 'info-container', className: 'mb-4 md:mb-0' }, [
+                  React.createElement('h3', { 
+                    key: 'subcontractor-name',
+                    className: 'text-lg font-semibold'
+                  }, subcontractor.subName || 'Unnamed Subcontractor'),
+                  
+                  // Contact info
+                  React.createElement('div', { key: `contact-info-${index}`, className: 'text-sm text-gray-500 mt-1' }, [
+                    subcontractor.contactEmail && React.createElement('div', { key: `email-${index}` }, subcontractor.contactEmail),
+                    subcontractor.phone && React.createElement('div', { key: `phone-${index}` }, subcontractor.phone)
+                  ].filter(Boolean))
+                ]),
+                
+                // Right side - Actions
+                React.createElement('div', { key: 'actions-container', className: 'flex gap-2' }, [
+                  React.createElement('button', {
+                    key: 'edit-btn',
+                    onClick: (e) => {
+                      e.stopPropagation(); // Prevent row click
+                      handleEdit(subcontractor);
+                    },
+                    className: 'px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300'
+                  }, 'Edit'),
+                  React.createElement('button', {
+                    key: 'delete-btn',
+                    onClick: (e) => {
+                      e.stopPropagation(); // Prevent row click
+                      handleDelete(subcontractor.subId);
+                    },
+                    className: 'px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700'
+                  }, 'Delete')
+                ])
+              ])
+            ])
           )
         )
-      );
+      ]);
     };
 
-    // Render subcontractor details view
-    const renderSubcontractorDetails = () => {
-      if (!selectedSubcontractor) return null;
+    return React.createElement(SharedUI.Container, null, [
+      React.createElement('h2', { 
+        key: 'title',
+        className: 'text-2xl font-bold mb-6' 
+      }, 'Subcontractor Management'),
+      
+      // Loading State
+      loading && React.createElement(SharedUI.LoadingOverlay, {
+        key: 'loading-overlay'
+      }),
 
-      return React.createElement('div', { className: 'space-y-6' },
-        // Header with back button
-        React.createElement('div', { 
-          className: 'flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6' 
+      // Error Message
+      error && React.createElement('div', {
+        key: 'error-message',
+        className: 'bg-red-100 text-red-700 p-4 rounded-lg mb-6'
+      }, error),
+
+      // Form Modal
+      showForm && React.createElement(SharedUI.BottomSheet, {
+        key: 'form-modal',
+        isOpen: true,
+        onClose: () => {
+          setShowForm(false);
+          setSelectedSubcontractor(null);
         },
-          React.createElement('h3', { className: 'text-xl font-bold' }, 
-            `${selectedSubcontractor.subName} Details`
-          ),
-          React.createElement('button', {
-            onClick: () => {
-              setSelectedSubcontractor(null);
-              setViewMode('list');
-            },
-            className: 'inline-flex items-center text-blue-600 hover:text-blue-800'
-          }, 
-            React.createElement('span', { className: 'mr-2' }, '←'),
-            'Back to List'
-          )
-        ),
+        title: selectedSubcontractor ? 'Edit Subcontractor' : 'Add New Subcontractor'
+      }, React.createElement(SubcontractorForm)),
 
-        // Contact Information Card
-        React.createElement('div', { className: 'bg-white p-4 sm:p-6 rounded-lg shadow-sm' },
-          React.createElement('h4', { className: 'font-semibold mb-4' }, 'Contact Information'),
-          React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-4' },
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Email:'),
-              React.createElement('p', null, selectedSubcontractor.contactEmail || 'N/A')
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Phone:'),
-              React.createElement('p', null, selectedSubcontractor.phone || 'N/A')
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Address:'),
-              React.createElement('p', null, 
-                [
-                  selectedSubcontractor.address, 
-                  selectedSubcontractor.city, 
-                  selectedSubcontractor.state, 
-                  selectedSubcontractor.zip
-                ].filter(Boolean).join(', ') || 'N/A'
-              )
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Status:'),
-              React.createElement('p', null, selectedSubcontractor.status || 'Unknown')
-            )
-          )
-        ),
+      // Summary Modal - New addition
+      showSummary && React.createElement('div', {
+        key: 'summary-view',
+        className: 'mt-6 mb-6'
+      }, React.createElement(SubcontractorSummary)),
 
-        // Subcontractor Metrics Card
-        React.createElement('div', { className: 'bg-white p-4 sm:p-6 rounded-lg shadow-sm' },
-          React.createElement('h4', { className: 'font-semibold mb-4' }, 'Subcontractor Metrics'),
-          React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4' },
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Total Projects:'),
-              React.createElement('p', { className: 'text-lg font-semibold' }, 
-                selectedSubcontractor.metrics?.totalProjects || 0
-              )
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Active Projects:'),
-              React.createElement('p', { className: 'text-lg font-semibold' }, 
-                selectedSubcontractor.metrics?.activeProjects || 0
-              )
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Total Revenue:'),
-              React.createElement('p', { className: 'text-lg font-semibold' }, 
-                new Intl.NumberFormat('en-US', {
-                  style: 'currency',
-                  currency: 'USD'
-                }).format(selectedSubcontractor.metrics?.totalRevenue || 0)
-              )
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Avg Project Value:'),
-              React.createElement('p', { className: 'text-lg font-semibold' }, 
-                new Intl.NumberFormat('en-US', {
-                  style: 'currency',
-                  currency: 'USD'
-                }).format(selectedSubcontractor.metrics?.averageProjectValue || 0)
-              )
-            )
-          )
-        ),
-        isEditing ? 
-          React.createElement(EditSubcontractorForm, {
-            subcontractor: selectedSubcontractor,
-            onSubmit: handleUpdateSubcontractor,
-            onCancel: () => setIsEditing(false)
-          }) :
-          React.createElement(React.Fragment, null,
-            // Add Edit button
-            React.createElement('button', {
-              onClick: () => setIsEditing(true),
-              className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700'
-            }, 'Edit Subcontractor')
-          )
-      );
-    };
-
-    // Render the main view
-    return React.createElement('div', { className: 'relative' },
-      isCreating
-        ? React.createElement(CreateSubcontractorForm, {
-            onSubmit: handleCreateSubcontractor,
-            onCancel: () => setIsCreating(false)
-          })
-        : React.createElement('div', { className: 'space-y-6' },
-            renderHeader(),
-            viewMode === 'details'
-              ? renderSubcontractorDetails()
-              : React.createElement(React.Fragment, null,
-                  renderControls(),
-                  React.createElement('div', { className: 'flex justify-end mb-4' },
-                    React.createElement('button', {
-                      onClick: exportSubcontractorData,
-                      className: 'px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700'
-                    }, 'Export CSV')
-                  ),
-                  React.createElement(StandardTable, {
-                    columns: [
-                      { key: 'subId', label: 'ID' },
-                      { key: 'subName', label: 'Name' },
-                      { key: 'contactEmail', label: 'Email' },
-                      { key: 'phone', label: 'Phone' },
-                      { 
-                        key: 'status', 
-                        label: 'Status', 
-                        render: (sub) => React.createElement('span', {
-                          className: `px-2 py-1 rounded text-xs ${
-                            sub.status === 'Active' ? 'bg-green-100 text-green-800' :
-                            sub.status === 'Inactive' ? 'bg-red-100 text-red-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`
-                        }, sub.status || 'Unknown')
-                      }
-                    ],
-                    data: filteredSubcontractors,
-                    onRowClick: (sub) => {
-                      setSelectedSubcontractor(sub);
-                      setViewMode('details');
-                    }
-                  })
-                )
-          )
-    );
+      // Main Content - Only show if not viewing summary
+      !showForm && !showSummary && React.createElement(SubcontractorList, {
+        key: 'subcontractor-list'
+      })
+    ].filter(Boolean));
   };
 
-  // Export to global window object
-  if (typeof window !== 'undefined') {
-    window.SubcontractorManagement = SubcontractorManagement;
-  }
+  // Expose to global scope
+  window.SubcontractorManagementComponent = SubcontractorManagementComponent;
 })();
 </script>

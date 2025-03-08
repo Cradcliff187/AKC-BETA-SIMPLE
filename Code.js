@@ -199,6 +199,37 @@ function createProject(data) {
 // TIME LOGGING
 // ==========================================
 
+function getTimeEntries() {
+  const context = 'getTimeEntries';
+  try {
+    const sheet = getSheet(CONFIG.SHEETS.TIME_LOGS);
+    if (!sheet) {
+      return createStandardResponse(false, null, "Time Logs sheet not found");
+    }
+
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const entries = data.slice(1).map(row => {
+      return {
+        id: row[0],
+        projectId: row[1],
+        date: row[2],
+        startTime: row[3],
+        endTime: row[4],
+        hours: row[5],
+        submittingUser: row[6],
+        forUserEmail: row[7],
+        timestamp: row[8],
+        type: row[9] || 'regular'
+      };
+    });
+
+    return createStandardResponse(true, entries);
+  } catch (error) {
+    return handleError(error, context);
+  }
+}
+
 function submitTimeLog(data) {
   const context = 'submitTimeLog';
   try {
@@ -251,9 +282,224 @@ function submitTimeLog(data) {
   }
 }
 
+function createTimeEntry(data) {
+  const context = 'createTimeEntry';
+  try {
+    // Validate required fields
+    const requiredFields = ['date', 'projectId', 'hours', 'description', 'type'];
+    const validation = validateRequiredFields(data, requiredFields);
+    if (!validation.valid) {
+      return createStandardResponse(false, null, validation.error);
+    }
+
+    const submittingUser = Session.getActiveUser().getEmail();
+    const timeEntryId = "TE" + new Date().getTime();
+
+    // Insert into TIME_LOGS sheet
+    const sheet = getSheet(CONFIG.SHEETS.TIME_LOGS);
+    if (!sheet) {
+      return createStandardResponse(false, null, "Time Logs sheet not found");
+    }
+
+    // Add the time entry row
+    sheet.appendRow([
+      timeEntryId,
+      data.projectId,
+      data.date,
+      data.startTime || '',
+      data.endTime || '',
+      data.hours,
+      submittingUser,
+      data.forUserEmail || '',
+      new Date(),
+      data.type || 'regular',
+      data.description
+    ]);
+
+    // Log activity
+    logSystemActivity(
+      'TIME_ENTRY_CREATED',
+      'TIME',
+      timeEntryId,
+      {
+        projectId: data.projectId,
+        date: data.date,
+        hours: data.hours,
+        type: data.type,
+        description: data.description,
+        submittingUser
+      }
+    );
+
+    return createStandardResponse(true, {
+      id: timeEntryId,
+      date: data.date,
+      hours: data.hours,
+      type: data.type,
+      description: data.description
+    });
+  } catch (error) {
+    return handleError(error, context);
+  }
+}
+
+function updateTimeEntry(data) {
+  const context = 'updateTimeEntry';
+  try {
+    // Validate required fields
+    const requiredFields = ['id', 'date', 'projectId', 'hours', 'description', 'type'];
+    const validation = validateRequiredFields(data, requiredFields);
+    if (!validation.valid) {
+      return createStandardResponse(false, null, validation.error);
+    }
+
+    const sheet = getSheet(CONFIG.SHEETS.TIME_LOGS);
+    if (!sheet) {
+      return createStandardResponse(false, null, "Time Logs sheet not found");
+    }
+
+    // Find the row with the time entry ID
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0];
+    const idCol = headers.indexOf('TimeEntryID');
+    if (idCol === -1) {
+      return createStandardResponse(false, null, "TimeEntryID column not found");
+    }
+
+    let rowIndex = -1;
+    for (let i = 1; i < values.length; i++) {
+      if (values[i][idCol] === data.id) {
+        rowIndex = i + 1; // Adding 1 because sheet rows are 1-indexed
+        break;
+      }
+    }
+
+    if (rowIndex === -1) {
+      return createStandardResponse(false, null, "Time entry not found");
+    }
+
+    // Update the time entry fields
+    const projectIdCol = headers.indexOf('ProjectID');
+    const dateCol = headers.indexOf('Date');
+    const startTimeCol = headers.indexOf('StartTime');
+    const endTimeCol = headers.indexOf('EndTime');
+    const hoursCol = headers.indexOf('Hours');
+    const typeCol = headers.indexOf('Type');
+    const descriptionCol = headers.indexOf('Description');
+
+    if (projectIdCol !== -1) sheet.getRange(rowIndex, projectIdCol + 1).setValue(data.projectId);
+    if (dateCol !== -1) sheet.getRange(rowIndex, dateCol + 1).setValue(data.date);
+    if (startTimeCol !== -1) sheet.getRange(rowIndex, startTimeCol + 1).setValue(data.startTime || '');
+    if (endTimeCol !== -1) sheet.getRange(rowIndex, endTimeCol + 1).setValue(data.endTime || '');
+    if (hoursCol !== -1) sheet.getRange(rowIndex, hoursCol + 1).setValue(data.hours);
+    if (typeCol !== -1) sheet.getRange(rowIndex, typeCol + 1).setValue(data.type || 'regular');
+    if (descriptionCol !== -1) sheet.getRange(rowIndex, descriptionCol + 1).setValue(data.description);
+
+    // Log activity
+    logSystemActivity(
+      'TIME_ENTRY_UPDATED',
+      'TIME',
+      data.id,
+      {
+        projectId: data.projectId,
+        date: data.date,
+        hours: data.hours,
+        type: data.type,
+        description: data.description,
+        updatedBy: Session.getActiveUser().getEmail()
+      }
+    );
+
+    return createStandardResponse(true, data);
+  } catch (error) {
+    return handleError(error, context);
+  }
+}
+
+function deleteTimeEntry(id) {
+  const context = 'deleteTimeEntry';
+  try {
+    if (!id) {
+      return createStandardResponse(false, null, "Time entry ID is required");
+    }
+
+    const sheet = getSheet(CONFIG.SHEETS.TIME_LOGS);
+    if (!sheet) {
+      return createStandardResponse(false, null, "Time Logs sheet not found");
+    }
+
+    // Find the row with the time entry ID
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0];
+    const idCol = headers.indexOf('TimeEntryID');
+    if (idCol === -1) {
+      return createStandardResponse(false, null, "TimeEntryID column not found");
+    }
+
+    let rowIndex = -1;
+    for (let i = 1; i < values.length; i++) {
+      if (values[i][idCol] === id) {
+        rowIndex = i + 1; // Adding 1 because sheet rows are 1-indexed
+        break;
+      }
+    }
+
+    if (rowIndex === -1) {
+      return createStandardResponse(false, null, "Time entry not found");
+    }
+
+    // Delete the row
+    sheet.deleteRow(rowIndex);
+
+    // Log activity
+    logSystemActivity(
+      'TIME_ENTRY_DELETED',
+      'TIME',
+      id,
+      {
+        deletedBy: Session.getActiveUser().getEmail()
+      }
+    );
+
+    return createStandardResponse(true, { id: id });
+  } catch (error) {
+    return handleError(error, context);
+  }
+}
+
 // ==========================================
 // MATERIALS RECEIPT MANAGEMENT
 // ==========================================
+
+function getMaterialsReceipts() {
+  const context = 'getMaterialsReceipts';
+  try {
+    const sheet = getSheet(CONFIG.SHEETS.MATERIALS_RECEIPTS);
+    if (!sheet) {
+      return createStandardResponse(false, null, "Materials Receipts sheet not found");
+    }
+
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const receipts = data.slice(1).map(row => {
+      return {
+        id: row[0],
+        projectId: row[1],
+        vendorId: row[2],
+        vendorName: row[3],
+        amount: row[4],
+        receiptDocURL: row[5],
+        submittingUser: row[6],
+        forUserEmail: row[7],
+        timestamp: row[8]
+      };
+    });
+
+    return createStandardResponse(true, receipts);
+  } catch (error) {
+    return handleError(error, context);
+  }
+}
 
 function submitMaterialsReceipt(data) {
   const context = 'submitMaterialsReceipt';
@@ -318,9 +564,14 @@ function submitMaterialsReceipt(data) {
 function getVendorsForClient() {
   const context = 'getVendorsForClient';
   try {
+    Logger.log('=== Starting getVendorsForClient ===');
     const vendors = getVendors();
+    Logger.log(`Retrieved ${vendors ? vendors.length : 0} vendors`);
+    Logger.log('First vendor:', vendors && vendors.length > 0 ? JSON.stringify(vendors[0]) : 'No vendors found');
     return createStandardResponse(true, vendors);
   } catch (error) {
+    Logger.log(`Error in ${context}: ${error.message}`);
+    Logger.log(`Stack: ${error.stack}`);
     return handleError(error, context);
   }
 }
@@ -640,23 +891,6 @@ function uploadReceiptFile(base64Data, folderId, fileType = 'MATREC') {
       Logger.log('Folder ID: ' + folder.getId());
     } catch (folderError) {
       Logger.log('Folder verification failed: ' + folderError.message);
-      
-      // Additional debugging: log all existing project folders
-      try {
-        const projects = getActiveProjects();
-        Logger.log('Project Folders Lookup:');
-        projects.forEach(proj => {
-          Logger.log(`Project: ${proj.name}`);
-          Logger.log(`Main Folder ID: ${proj.folderId}`);
-          Logger.log(`Estimates Folder ID: ${proj.estimatesFolderId}`);
-          Logger.log(`Materials Folder ID: ${proj.materialsFolderId}`);
-          Logger.log(`SubInvoices Folder ID: ${proj.subInvoicesFolderId}`);
-          Logger.log('---');
-        });
-      } catch (projectsError) {
-        Logger.log('Error retrieving project folders: ' + projectsError.message);
-      }
-
       return createStandardResponse(false, null, "Invalid folder ID: " + folderId);
     }
 
@@ -677,34 +911,41 @@ function uploadReceiptFile(base64Data, folderId, fileType = 'MATREC') {
       Logger.log('File Name: ' + uploadedFile.name);
       Logger.log('File Type: ' + uploadedFile.mimeType);
       Logger.log('File Size: ' + uploadedFile.size);
+      
+      // Create the document URL
+      const docUrl = `https://drive.google.com/file/d/${uploadedFile.id}/view`;
+      Logger.log('Generated document URL:', docUrl);
+
+      // Log activity
+      logSystemActivity(
+        'FILE_UPLOADED',
+        'FILE_STORAGE',
+        uploadedFile.id,
+        {
+          fileName: uploadedFile.name,
+          fileType: fileType,
+          mimeType: uploadedFile.mimeType,
+          size: uploadedFile.size,
+          originalFolderId: folderId,
+          docUrl: docUrl
+        }
+      );
+
+      // Return successful response
+      return createStandardResponse(true, {
+        url: docUrl,
+        name: uploadedFile.name,
+        mimeType: uploadedFile.mimeType,
+        id: fileId,
+        folderId: folderId,
+        fileId: uploadedFile.id
+      });
+
     } catch (uploadError) {
       Logger.log('Drive upload error: ' + uploadError.message);
       Logger.log('Full error object: ' + JSON.stringify(uploadError));
       return createStandardResponse(false, null, "Failed to upload file to Drive: " + uploadError.message);
     }
-
-    // Log activity
-    logSystemActivity(
-      'FILE_UPLOADED',
-      'FILE_STORAGE',
-      uploadedFile.id,
-      {
-        fileName: uploadedFile.name,
-        fileType: fileType,
-        mimeType: uploadedFile.mimeType,
-        size: uploadedFile.size,
-        originalFolderId: folderId
-      }
-    );
-
-    // Return successful response
-    return createStandardResponse(true, {
-      url: `https://drive.google.com/file/d/${uploadedFile.id}/view`,
-      name: uploadedFile.name,
-      mimeType: uploadedFile.mimeType,
-      id: fileId,
-      folderId: folderId
-    });
 
   } catch (error) {
     Logger.log('=== Unexpected Error in uploadReceiptFile ===');
@@ -1369,6 +1610,178 @@ function getEstimateDetails(estimateId) {
       docUrl: estimateRow[docUrlCol] || '',
       jobDescription: estimateRow[jobDescriptionCol] || ''
     });
+  } catch (error) {
+    return handleError(error, context);
+  }
+}
+
+// ==========================================
+// ENHANCED CONTACT CARD FUNCTIONS
+// ==========================================
+
+function getSubcontractorDetailsForClient(subId) {
+  const context = 'getSubcontractorDetailsForClient';
+  try {
+    const subcontractors = getSubcontractors();
+    const subcontractor = subcontractors.find(s => s.subId === subId);
+    
+    if (!subcontractor) {
+      return createStandardResponse(false, null, 'Subcontractor not found');
+    }
+
+    const enrichedSubcontractor = enrichSubcontractorData(subcontractor);
+    return createStandardResponse(true, enrichedSubcontractor);
+  } catch (error) {
+    return handleError(error, context);
+  }
+}
+
+function getVendorDetailsForClient(vendorId) {
+  const context = 'getVendorDetailsForClient';
+  try {
+    const vendors = getVendors();
+    const vendor = vendors.find(v => v.vendorId === vendorId);
+    
+    if (!vendor) {
+      return createStandardResponse(false, null, 'Vendor not found');
+    }
+
+    const enrichedVendor = enrichVendorData(vendor);
+    return createStandardResponse(true, enrichedVendor);
+  } catch (error) {
+    return handleError(error, context);
+  }
+}
+
+function getVendorDetails(vendorId) {
+  const context = 'getVendorDetails';
+  try {
+    console.log('Getting details for vendor:', vendorId);
+    
+    // Get vendor from existing getVendors function and filter
+    const vendors = getVendors();
+    console.log('All vendors:', vendors);
+    
+    const vendor = vendors.find(v => v.vendorId === vendorId);
+    console.log('Found vendor:', vendor);
+    
+    if (!vendor) {
+      console.error('Vendor not found:', vendorId);
+      return { 
+        receipts: [], 
+        metrics: { 
+          receiptCount: 0, 
+          totalSpent: 0, 
+          uniqueProjects: 0, 
+          recentPurchases: [], 
+          categoryBreakdown: {} 
+        },
+        vendor: null
+      };
+    }
+    
+    // Get materials receipts for this vendor
+    const receipts = getMaterialsReceiptsByVendor(vendorId);
+    console.log('Found receipts:', receipts.length);
+    
+    // Calculate metrics
+    const metrics = {
+      receiptCount: receipts.length,
+      totalSpent: receipts.reduce((sum, rec) => sum + (parseFloat(rec.amount) || 0), 0),
+      uniqueProjects: [...new Set(receipts.map(rec => rec.projectId))].length,
+      recentPurchases: receipts
+        .sort((a, b) => new Date(b.createdOn || b.timestamp) - new Date(a.createdOn || a.timestamp))
+        .slice(0, 5),
+      categoryBreakdown: receipts.reduce((acc, rec) => {
+        const category = rec.category || 'Uncategorized';
+        if (!acc[category]) {
+          acc[category] = { count: 0, total: 0 };
+        }
+        acc[category].count++;
+        acc[category].total += parseFloat(rec.amount) || 0;
+        return acc;
+      }, {})
+    };
+
+    // Log the full details being returned
+    console.log('Receipt sample:', receipts[0]);
+    console.log('Recent purchases sample:', metrics.recentPurchases[0]);
+
+    return { 
+      receipts, 
+      metrics,
+      vendor
+    };
+  } catch (error) {
+    console.error('Error in getVendorDetails:', error);
+    return { 
+      receipts: [], 
+      metrics: { 
+        receiptCount: 0, 
+        totalSpent: 0, 
+        uniqueProjects: 0, 
+        recentPurchases: [], 
+        categoryBreakdown: {} 
+      },
+      vendor: null
+    };
+  }
+}
+
+// Also update getMaterialsReceiptsByVendor to ensure consistent vendor information
+function getMaterialsReceiptsByVendor(vendorId) {
+  const sheet = getSheet(CONFIG.SHEETS.MATERIALS_RECEIPTS);
+  if (!sheet) {
+    console.error('Materials Receipts sheet not found');
+    return [];
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  
+  // Find column indices based on headers
+  const receiptIdCol = headers.indexOf("ReceiptID");
+  const projectIdCol = headers.indexOf("ProjectID");
+  const vendorIdCol = headers.indexOf("VendorID");
+  const vendorNameCol = headers.indexOf("VendorName");
+  const amountCol = headers.indexOf("Amount");
+  const receiptDocURLCol = headers.indexOf("ReceiptDocURL");
+  const submittingUserCol = headers.indexOf("SubmittingUser");
+  const timestampCol = headers.indexOf("Timestamp");
+  const descriptionCol = headers.indexOf("Description");  // May not exist
+  
+  console.log('Searching for receipts with vendorId:', vendorId);
+  
+  // Filter rows for this vendor
+  const vendorReceipts = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    
+    if (row[vendorIdCol] === vendorId) {
+      vendorReceipts.push({
+        id: row[receiptIdCol],
+        projectId: row[projectIdCol],
+        vendorId: row[vendorIdCol],
+        vendorName: row[vendorNameCol],
+        amount: row[amountCol],
+        receiptDocURL: row[receiptDocURLCol] || '',
+        submittingUser: row[submittingUserCol] || '',
+        timestamp: row[timestampCol],
+        createdOn: row[timestampCol],
+        description: descriptionCol !== -1 ? row[descriptionCol] : 'Materials purchase'
+      });
+    }
+  }
+  
+  console.log(`Found ${vendorReceipts.length} receipts for vendor ${vendorId}`);
+  return vendorReceipts;
+}
+
+function updateVendorNameForClient(vendorId, newName) {
+  const context = 'updateVendorNameForClient';
+  try {
+    const result = updateVendorName(vendorId, newName);
+    return createStandardResponse(true, result);
   } catch (error) {
     return handleError(error, context);
   }

@@ -1,597 +1,936 @@
+<?!= include('SharedComponents'); ?>
+
 <script>
 (function() {
-  // === Standardized Loading Overlay ===
-  const StandardLoadingOverlay = ({ message = 'Loading...' }) => {
-    return React.createElement('div', {
-      className: 'absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50'
-    }, 
-      React.createElement('div', { 
-        className: 'text-center flex flex-col items-center justify-center' 
-      },
-        // Spinner SVG
-        React.createElement('svg', {
-          className: 'animate-spin h-10 w-10 text-blue-600 mb-4',
-          xmlns: 'http://www.w3.org/2000/svg',
-          fill: 'none',
-          viewBox: '0 0 24 24'
-        },
-          React.createElement('circle', {
-            className: 'opacity-25',
-            cx: '12',
-            cy: '12',
-            r: '10',
-            stroke: 'currentColor',
-            strokeWidth: '4'
-          }),
-          React.createElement('path', {
-            className: 'opacity-75',
-            fill: 'currentColor',
-            d: 'M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
-          })
-        ),
-        // Loading text
-        React.createElement('span', { 
-          className: 'text-lg text-gray-700 font-semibold' 
-        }, message)
-      )
-    );
-  };
-
   // === Standardized Table Component ===
-  const StandardTable = ({ 
-    columns,     // Array of column definitions
-    data,        // Filtered data
-    onRowClick   // Handler for row selection
-  }) => {
+  function StandardTable(props) {
+    var columns = props.columns;
+    var data = props.data;
+    var onRowClick = props.onRowClick;
+
     return React.createElement('div', { className: 'bg-white rounded-lg shadow overflow-hidden' },
-      React.createElement('table', { className: 'min-w-full divide-y divide-gray-200' },
-        // Table Header
-        React.createElement('thead', { className: 'bg-gray-50' },
-          React.createElement('tr', null,
-            columns.map(col => 
+      React.createElement('table', { className: 'w-full' }, [
+        React.createElement('thead', { key: 'thead' }, 
+          React.createElement('tr', { key: 'header-row' }, 
+            columns.map((column, index) => 
               React.createElement('th', {
-                key: col.key,
-                className: 'px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'
-              }, col.label)
+                key: `header-${index}`,
+                className: 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'
+              }, column.header || column.label)
             )
           )
         ),
-        // Table Body
-        React.createElement('tbody', { className: 'bg-white divide-y divide-gray-200' },
-          data.map(item => 
-            React.createElement('tr', { 
-              key: item.vendorId,
-              onClick: () => onRowClick(item),
-              className: 'hover:bg-gray-50 cursor-pointer'
-            },
-              columns.map(col => 
+        React.createElement('tbody', { key: 'tbody' }, 
+          data.map((row, rowIndex) => 
+            React.createElement('tr', {
+              key: `row-${rowIndex}`,
+              onClick: onRowClick ? () => onRowClick(row) : undefined,
+              className: onRowClick ? 'cursor-pointer hover:bg-gray-50' : ''
+            }, 
+              columns.map((column, colIndex) => 
                 React.createElement('td', {
-                  key: col.key,
-                  className: 'px-3 py-2 whitespace-nowrap text-sm text-gray-900'
+                  key: `cell-${rowIndex}-${colIndex}`,
+                  className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
                 }, 
-                  col.render ? col.render(item) : (item[col.key] || 'N/A')
+                  // Handle different column property patterns
+                  column.cell ? column.cell(row) : 
+                  column.render ? column.render(row) : 
+                  row[column.key] || ''
                 )
               )
             )
           )
         )
-      )
+      ])
     );
-  };
+  }
 
-  // === Create Vendor Form Component ===
-  const CreateVendorForm = ({ onSubmit, onCancel }) => {
+  // Vendor Management Component
+  const VendorManagementComponent = () => {
+    const [vendors, setVendors] = React.useState([]);
+    const [loading, setLoading] = React.useState(true);
+    const [error, setError] = React.useState(null);
+    const [selectedVendor, setSelectedVendor] = React.useState(null);
+    const [showForm, setShowForm] = React.useState(false);
+    const [showSummary, setShowSummary] = React.useState(false);
     const [formData, setFormData] = React.useState({
       vendorName: '',
+      contactPerson: '',
+      contactEmail: '',
+      phone: '',
       address: '',
-      city: '',
-      state: '',
-      zip: '',
-      email: '',
-      phone: ''
+      category: '',
+      status: 'ACTIVE' // Default status
     });
+    const [constants, setConstants] = React.useState(null);
+
+    // Load vendors and constants on mount
+    React.useEffect(() => {
+      loadVendors();
+      loadConstants();
+    }, []);
+
+    const loadVendors = () => {
+      setLoading(true);
+      google.script.run
+        .withSuccessHandler((result) => {
+          console.log('Loaded vendors:', result);
+          if (result && result.success) {
+            setVendors(result.data || []);
+          } else {
+            setError(result?.error || 'Failed to load vendors');
+          }
+          setLoading(false);
+        })
+        .withFailureHandler(handleError)
+        .getVendorsForClient();
+    };
+
+    const loadConstants = () => {
+      google.script.run
+        .withSuccessHandler(handleConstantsLoaded)
+        .withFailureHandler(handleError)
+        .getClientConstants();
+    };
+
+    const handleConstantsLoaded = (result) => {
+      setConstants(result);
+    };
+
+    const handleError = (error) => {
+      setError(error.message || 'An error occurred');
+      setLoading(false);
+    };
 
     const handleSubmit = (e) => {
       e.preventDefault();
-      if (!formData.vendorName.trim()) return;
-      onSubmit(formData);
-    };
-
-    // Phone number formatter
-    const formatPhoneNumber = (value) => {
-      const cleaned = value.replace(/\D/g, '');
-      if (cleaned.length >= 10) {
-        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6,10)}`;
-      } else if (cleaned.length > 6) {
-        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
-      } else if (cleaned.length > 3) {
-        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3)}`;
-      } else if (cleaned.length > 0) {
-        return `(${cleaned}`;
-      }
-      return cleaned;
-    };
-
-    return React.createElement('div', { className: 'space-y-4 bg-white p-6 rounded-lg shadow' },
-      React.createElement('h3', { className: 'text-lg font-semibold' }, 'Create New Vendor'),
-      React.createElement('form', { onSubmit: handleSubmit, className: 'space-y-4' },
-        // Vendor Name (required)
-        React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Vendor Name *'),
-          React.createElement('input', {
-            type: 'text',
-            required: true,
-            value: formData.vendorName,
-            onChange: e => setFormData(prev => ({ ...prev, vendorName: e.target.value })),
-            className: 'w-full p-2 border rounded'
-          })
-        ),
-        // Address
-        React.createElement('div', null,
-          React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Address'),
-          React.createElement('input', {
-            type: 'text',
-            value: formData.address,
-            onChange: e => setFormData(prev => ({ ...prev, address: e.target.value })),
-            className: 'w-full p-2 border rounded'
-          })
-        ),
-        // City, State, Zip
-        React.createElement('div', { className: 'grid grid-cols-3 gap-4' },
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'City'),
-            React.createElement('input', {
-              type: 'text',
-              value: formData.city,
-              onChange: e => setFormData(prev => ({ ...prev, city: e.target.value })),
-              className: 'w-full p-2 border rounded'
-            })
-          ),
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'State'),
-            React.createElement('input', {
-              type: 'text',
-              maxLength: 2,
-              value: formData.state,
-              onChange: e => setFormData(prev => ({ ...prev, state: e.target.value.toUpperCase() })),
-              className: 'w-full p-2 border rounded'
-            })
-          ),
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'ZIP'),
-            React.createElement('input', {
-              type: 'text',
-              maxLength: 5,
-              value: formData.zip,
-              onChange: e => setFormData(prev => ({ 
-                ...prev, 
-                zip: e.target.value.replace(/\D/g, '').slice(0, 5)
-              })),
-              className: 'w-full p-2 border rounded'
-            })
-          )
-        ),
-        // Contact Info
-        React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Phone'),
-            React.createElement('input', {
-              type: 'tel',
-              value: formData.phone,
-              onChange: e => setFormData(prev => ({ 
-                ...prev, 
-                phone: formatPhoneNumber(e.target.value)
-              })),
-              className: 'w-full p-2 border rounded'
-            })
-          ),
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Email'),
-            React.createElement('input', {
-              type: 'email',
-              value: formData.email,
-              onChange: e => setFormData(prev => ({ ...prev, email: e.target.value })),
-              className: 'w-full p-2 border rounded'
-            })
-          )
-        ),
-        // Buttons
-        React.createElement('div', { className: 'flex justify-end space-x-4 pt-4' },
-          React.createElement('button', {
-            type: 'button',
-            onClick: onCancel,
-            className: 'px-4 py-2 border rounded hover:bg-gray-50'
-          }, 'Cancel'),
-          React.createElement('button', {
-            type: 'submit',
-            className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700'
-          }, 'Create Vendor')
-        )
-      )
-    );
-  };
-
-  // === Main VendorManagement Component ===
-  const VendorManagement = ({ showMessage, loading: parentLoading, setLoading: setParentLoading }) => {
-    // Remove local loading state, use parent's exclusively
-    const setLoading = setParentLoading;
-    const mountedRef = React.useRef(true);
-
-    // State management
-    const [vendors, setVendors] = React.useState([]);
-    const [filteredVendors, setFilteredVendors] = React.useState([]);
-    const [selectedVendor, setSelectedVendor] = React.useState(null);
-    const [viewMode, setViewMode] = React.useState('list');
-    const [isCreating, setIsCreating] = React.useState(false);
-    const [searchTerm, setSearchTerm] = React.useState('');
-    const [statusFilter, setStatusFilter] = React.useState('All');
-
-    // === Data Fetching with Better Error Handling ===
-    const fetchVendors = React.useCallback(() => {
-      if (!mountedRef.current) return;
       setLoading(true);
 
-      return new Promise((resolve, reject) => {
-        google.script.run
-          .withSuccessHandler(response => {
-            if (!mountedRef.current) return;
-            if (response && response.success) {
-              setVendors(response.data || []);
-              setFilteredVendors(response.data || []);
-              resolve(response.data);
-            } else {
-              const error = response?.error || 'Failed to load vendors';
-              showMessage(error, 'error');
-              reject(new Error(error));
-            }
-            setLoading(false);
-          })
-          .withFailureHandler(error => {
-            if (!mountedRef.current) return;
-            console.error('Error fetching vendors:', error);
-            showMessage('Failed to load vendors', 'error');
-            setLoading(false);
-            reject(error);
-          })
-          .getVendorsForClient();
+      const vendorData = selectedVendor 
+        ? { ...formData, id: selectedVendor.id }
+        : formData;
+
+      google.script.run
+        .withSuccessHandler(() => {
+          loadVendors();
+          setShowForm(false);
+          setSelectedVendor(null);
+          setFormData({
+            vendorName: '',
+            contactPerson: '',
+            contactEmail: '',
+            phone: '',
+            address: '',
+            category: '',
+            status: 'ACTIVE'
+          });
+        })
+        .withFailureHandler(handleError)
+        [selectedVendor ? 'updateVendor' : 'createVendor'](vendorData);
+    };
+
+    const handleEdit = (vendor) => {
+      setSelectedVendor(vendor);
+      setFormData({
+        vendorName: vendor.vendorName || '',
+        contactPerson: vendor.contactPerson || '',
+        contactEmail: vendor.contactEmail || '',
+        phone: vendor.phone || '',
+        address: vendor.address || '',
+        category: vendor.category || '',
+        status: vendor.status || 'ACTIVE'
       });
-    }, [setLoading, showMessage]);
+      setShowForm(true);
+      setShowSummary(false);
+    };
 
-    // Cleanup on unmount
-    React.useEffect(() => {
-      return () => {
-        mountedRef.current = false;
-      };
-    }, []);
+    const handleRowClick = (vendor) => {
+      console.log('Selected vendor:', vendor);
+      setSelectedVendor(vendor);
+      setShowSummary(true);
+      setShowForm(false);
+    };
 
-    // Initial fetch with error boundary
-    React.useEffect(() => {
-      fetchVendors().catch(error => {
-        console.error('Error in initial vendor fetch:', error);
-      });
-    }, [fetchVendors]);
-
-    // === Search and Filter Effect ===
-    React.useEffect(() => {
-      let filtered = [...vendors];
+    const handleDelete = (vendorId) => {
+      if (!confirm('Are you sure you want to delete this vendor?')) return;
       
-      if (searchTerm.trim()) {
-        const searchLower = searchTerm.toLowerCase();
-        filtered = filtered.filter(vendor => 
-          vendor.vendorName.toLowerCase().includes(searchLower) ||
-          vendor.vendorId.toLowerCase().includes(searchLower) ||
-          vendor.email?.toLowerCase().includes(searchLower) ||
-          vendor.phone?.includes(searchTerm)
+      setLoading(true);
+      google.script.run
+        .withSuccessHandler(loadVendors)
+        .withFailureHandler(handleError)
+        .deleteVendor(vendorId);
+    };
+
+    // New Vendor Summary Component
+    const VendorSummary = () => {
+      if (!selectedVendor) return null;
+      
+      const [vendorDetails, setVendorDetails] = React.useState(null);
+      const [isLoadingDetails, setIsLoadingDetails] = React.useState(true);
+      
+      React.useEffect(() => {
+        // Load vendor details
+        setIsLoadingDetails(true);
+        console.log('Loading details for vendor:', {
+          vendorId: selectedVendor.vendorId,
+          vendorName: selectedVendor.vendorName,
+          fullVendor: selectedVendor
+        });
+        google.script.run
+          .withSuccessHandler(function(result) {
+            console.log('Vendor details received:', result);
+            if (result && result.success && result.data) {
+              setVendorDetails(result.data);
+            } else {
+              console.error('Failed to load vendor details:', result?.error);
+              setVendorDetails({
+                receipts: [],
+                metrics: {
+                  receiptCount: 0,
+                  totalSpent: 0,
+                  uniqueProjects: 0,
+                  recentPurchases: [],
+                  categoryBreakdown: {}
+                },
+                vendor: selectedVendor // Include the original vendor data
+              });
+            }
+            setIsLoadingDetails(false);
+          })
+          .withFailureHandler(function(error) {
+            console.error('Error loading vendor details:', error);
+            setIsLoadingDetails(false);
+          })
+          .getVendorDetailsForClient(selectedVendor.vendorId);
+      }, [selectedVendor.vendorId]);
+
+      // Show loading state if details are still loading
+      if (isLoadingDetails) {
+        return React.createElement('div', { className: 'bg-white rounded-lg shadow p-6 text-center' },
+          React.createElement('div', { className: 'animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto' }),
+          React.createElement('p', { className: 'mt-4 text-gray-700' }, 'Loading vendor details...')
         );
       }
-
-      if (statusFilter !== 'All') {
-        filtered = filtered.filter(vendor => vendor.status === statusFilter);
-      }
-
-      setFilteredVendors(filtered);
-    }, [searchTerm, statusFilter, vendors]);
-
-    // === Handlers ===
-    const handleCreateVendor = async (formData) => {
-      setLoading(true);
       
-      try {
-        const cleanedData = {
-          vendorName: formData.vendorName.trim(),
-          address: formData.address.trim(),
-          city: formData.city.trim(),
-          state: formData.state.trim(),
-          zip: formData.zip.trim(),
-          email: formData.email.trim(),
-          phone: formatPhoneNumber(formData.phone)
-        };
-
-        const response = await new Promise((resolve, reject) => {
-          google.script.run
-            .withSuccessHandler(result => {
-              if (result === null) {
-                // Handle null response by fetching latest vendors
-                google.script.run
-                  .withSuccessHandler(vendorsResult => {
-                    if (vendorsResult && vendorsResult.success) {
-                      // Find our newly created vendor
-                      const foundVendor = vendorsResult.data.find(v => 
-                        v.vendorName === cleanedData.vendorName &&
-                        v.address === cleanedData.address
-                      );
-                      if (foundVendor) {
-                        resolve({ success: true, data: foundVendor });
-                      } else {
-                        reject(new Error('Could not verify vendor creation'));
-                      }
-                    } else {
-                      reject(new Error('Failed to verify vendor creation'));
-                    }
-                  })
-                  .withFailureHandler(error => reject(error))
-                  .getVendorsForClient();
-              } else if (result && result.success) {
-                resolve(result);
-              } else {
-                reject(new Error(result?.error || 'Server returned unsuccessful response'));
-              }
-            })
-            .withFailureHandler(error => {
-              console.error('Server error:', error);
-              reject(new Error(error.message || 'Failed to create vendor'));
-            })
-            .createVendorForClient(cleanedData);
-        });
-
-        if (response.success) {
-          showMessage('Vendor created successfully', 'success');
-          setIsCreating(false);
-          fetchVendors(); // Refresh list
-        } else {
-          throw new Error(response.error || 'Failed to create vendor');
-        }
-      } catch (error) {
-        console.error('Error creating vendor:', error);
-        showMessage(error.message || 'Error creating vendor', 'error');
-      } finally {
-        setLoading(false);
+      // If details failed to load or are empty, show basic vendor info
+      if (!vendorDetails) {
+        return React.createElement('div', { className: 'bg-white rounded-lg shadow p-6' }, [
+          React.createElement('div', { 
+            key: 'error-message',
+            className: 'text-center text-gray-500 mb-4' 
+          }, 'No purchase history found for this vendor.'),
+          React.createElement('div', {
+            key: 'vendor-basic-info',
+            className: 'border-t pt-4'
+          }, [
+            React.createElement('h4', { 
+              className: 'font-medium text-gray-700 mb-3' 
+            }, 'Vendor Information'),
+            React.createElement('div', { className: 'space-y-2' }, [
+              selectedVendor.vendorId && React.createElement('div', { className: 'flex items-start' }, [
+                React.createElement('div', { className: 'text-gray-500 w-24' }, 'Vendor ID:'),
+                React.createElement('div', { className: 'font-mono' }, selectedVendor.vendorId)
+              ]),
+              selectedVendor.createdDate && React.createElement('div', { 
+                key: 'created-on',
+                className: 'flex items-start' 
+              }, [
+                React.createElement('div', { 
+                  key: 'created-on-label',
+                  className: 'text-gray-500 w-24' 
+                }, 'Created:'),
+                React.createElement('div', { 
+                  key: 'created-on-value'
+                }, new Date(selectedVendor.createdDate).toLocaleDateString())
+              ]),
+              selectedVendor.vendorName && React.createElement('div', { className: 'flex items-start' }, [
+                React.createElement('div', { className: 'text-gray-500 w-24' }, 'Name:'),
+                React.createElement('div', { 
+                  key: 'vendor-name-value'
+                }, selectedVendor.vendorName)
+              ])
+            ])
+          ])
+        ]);
       }
-    };
-
-    // Phone number formatter
-    const formatPhoneNumber = (value) => {
-      const cleaned = value.replace(/\D/g, '');
-      if (cleaned.length >= 10) {
-        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6,10)}`;
-      } else if (cleaned.length > 6) {
-        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
-      } else if (cleaned.length > 3) {
-        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3)}`;
-      } else if (cleaned.length > 0) {
-        return `(${cleaned}`;
-      }
-      return cleaned;
-    };
-
-    // === Export Functionality ===
-    const exportVendorData = () => {
-      const exportData = filteredVendors.map(vendor => ({
-        'Vendor ID': vendor.vendorId,
-        'Name': vendor.vendorName,
-        'Email': vendor.email,
-        'Phone': vendor.phone,
-        'Total Transactions': vendor.metrics?.totalTransactions || 0,
-        'Total Spend': vendor.metrics?.totalSpend || 0,
-        'Status': vendor.status || 'N/A'
-      }));// Convert to CSV
-      const headers = Object.keys(exportData[0]);
-      const csvContent = [
-        headers.join(','),
-        ...exportData.map(row => 
-          headers.map(header => 
-            JSON.stringify(row[header] || '')
-          ).join(',')
-        )
-      ].join('\n');
-
-      // Create download link
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', `vendor_data_${new Date().toISOString()}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-    };
-
-    // === Render Methods ===
-    const renderHeader = () => {
-      return React.createElement('div', { 
-        className: 'flex flex-col sm:flex-row justify-between items-center gap-4 mb-6' 
-      },
-        React.createElement('h2', { 
-          className: 'text-xl sm:text-2xl font-bold text-gray-900' 
-        }, 'Vendor Management'),
-        React.createElement('button', {
-          onClick: () => setIsCreating(true),
-          className: 'px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700'
-        }, 'Add New Vendor')
-      );
-    };
-
-    const renderControls = () => {
-      return React.createElement('div', { className: 'flex flex-col sm:flex-row justify-between gap-4 mb-6' },
-        // Search and filters group
-        React.createElement('div', { className: 'flex flex-col sm:flex-row gap-4' },
-          React.createElement('input', {
-            type: 'text',
-            placeholder: 'Search vendors...',
-            value: searchTerm,
-            onChange: e => setSearchTerm(e.target.value),
-            className: 'p-2 border rounded w-full sm:w-64'
-          }),
-          React.createElement('select', {
-            value: statusFilter,
-            onChange: e => setStatusFilter(e.target.value),
-            className: 'p-2 border rounded w-full sm:w-auto'
-          },
-            React.createElement('option', { value: 'All' }, 'All Statuses'),
-            React.createElement('option', { value: 'Active' }, 'Active'),
-            React.createElement('option', { value: 'Inactive' }, 'Inactive')
-          )
-        )
-      );
-    };
-
-    // Render vendor details view
-    const renderVendorDetails = () => {
-      if (!selectedVendor) return null;
-
-      return React.createElement('div', { className: 'space-y-6' },
-        // Header with back button
+      
+      // Get stats and recent receipts from vendor details
+      const { metrics, receipts } = vendorDetails;
+      const recentReceipts = receipts || [];
+      
+      return React.createElement('div', { className: 'bg-white rounded-lg shadow p-6 space-y-6' }, [
+        // Header with actions
         React.createElement('div', { 
-          className: 'flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6' 
-        },
-          React.createElement('h3', { className: 'text-xl font-bold' }, 
-            `${selectedVendor.vendorName} Details`
-          ),
-          React.createElement('button', {
-            onClick: () => {
-              setSelectedVendor(null);
-              setViewMode('list');
-            },
-            className: 'inline-flex items-center text-blue-600 hover:text-blue-800'
-          }, 
-            React.createElement('span', { className: 'mr-2' }, '←'),
-            'Back to List'
-          )
-        ),
-
-        // Contact Information Card
-        React.createElement('div', { className: 'bg-white p-4 sm:p-6 rounded-lg shadow-sm' },
-          React.createElement('h4', { className: 'font-semibold mb-4' }, 'Contact Information'),
-          React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-4' },
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Email:'),
-              React.createElement('p', null, selectedVendor.email || 'N/A')
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Phone:'),
-              React.createElement('p', null, selectedVendor.phone || 'N/A')
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Address:'),
-              React.createElement('p', null, 
-                [
-                  selectedVendor.address, 
-                  selectedVendor.city, 
-                  selectedVendor.state, 
-                  selectedVendor.zip
-                ].filter(Boolean).join(', ') || 'N/A'
-              )
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Status:'),
-              React.createElement('p', null, selectedVendor.status || 'Unknown')
-            )
-          )
-        ),
-
-        // Vendor Metrics Card
-        React.createElement('div', { className: 'bg-white p-4 sm:p-6 rounded-lg shadow-sm' },
-          React.createElement('h4', { className: 'font-semibold mb-4' }, 'Vendor Metrics'),
-          React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4' },
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Total Transactions:'),
-              React.createElement('p', { className: 'text-lg font-semibold' }, 
-                selectedVendor.metrics?.totalTransactions || 0
-              )
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Total Spend:'),
-              React.createElement('p', { className: 'text-lg font-semibold' }, 
-                new Intl.NumberFormat('en-US', {
-                  style: 'currency',
-                  currency: 'USD'
-                }).format(selectedVendor.metrics?.totalSpend || 0)
-              )
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Average Transaction:'),
-              React.createElement('p', { className: 'text-lg font-semibold' }, 
-                new Intl.NumberFormat('en-US', {
-                  style: 'currency',
-                  currency: 'USD'
-                }).format(selectedVendor.metrics?.averageTransactionValue || 0)
-              )
-            ),
-            React.createElement('div', null,
-              React.createElement('p', { className: 'text-sm text-gray-600' }, 'Last Transaction:'),
-              React.createElement('p', { className: 'text-lg font-semibold' }, 
-                selectedVendor.metrics?.lastTransactionDate || 'N/A'
-              )
-            )
-          )
-        )
-      );
-    };
-
-    // Render the main view
-    return React.createElement('div', { className: 'relative' },
-      isCreating
-        ? React.createElement(CreateVendorForm, {
-            onSubmit: handleCreateVendor,
-            onCancel: () => setIsCreating(false)
-          })
-        : React.createElement('div', { className: 'space-y-6' },
-            renderHeader(),
-            viewMode === 'details'
-              ? renderVendorDetails()
-              : React.createElement(React.Fragment, null,
-                  renderControls(),
-                  React.createElement('div', { className: 'flex justify-end mb-4' },
-                    React.createElement('button', {
-                      onClick: exportVendorData,
-                      className: 'px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700'
-                    }, 'Export CSV')
-                  ),
-                  React.createElement(StandardTable, {
-                    columns: [
-                      { key: 'vendorId', label: 'ID' },
-                      { key: 'vendorName', label: 'Name' },
-                      { key: 'email', label: 'Email' },
-                      { key: 'phone', label: 'Phone' },
-                      { 
-                        key: 'status', 
-                        label: 'Status', 
-                        render: (vendor) => React.createElement('span', {
-                          className: `px-2 py-1 rounded text-xs ${
-                            vendor.status === 'Active' ? 'bg-green-100 text-green-800' :
-                            vendor.status === 'Inactive' ? 'bg-red-100 text-red-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`
-                        }, vendor.status || 'Unknown')
-                      }
-                    ],
-                    data: filteredVendors,
-                    onRowClick: (vendor) => {
-                      setSelectedVendor(vendor);
-                      setViewMode('details');
-                    }
+          key: 'header',
+          className: 'flex justify-between items-center border-b pb-4' 
+        }, [
+          React.createElement('h3', { 
+            key: 'title',
+            className: 'text-xl font-semibold' 
+          }, selectedVendor.vendorName || 'Vendor Details'),
+          React.createElement('div', { 
+            key: 'actions',
+            className: 'flex space-x-3' 
+          }, [
+            // Add fix button only for VEND-001
+            selectedVendor.vendorId === 'VEND-001' && React.createElement('button', {
+              key: 'fix-btn',
+              onClick: () => {
+                if (confirm('Fix vendor name to "Home Depot"?')) {
+                  google.script.run
+                    .withSuccessHandler(() => {
+                      loadVendors();
+                      setShowSummary(false);
+                    })
+                    .withFailureHandler(handleError)
+                    .updateVendorNameForClient('VEND-001', 'Home Depot');
+                }
+              },
+              className: 'px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700'
+            }, 'Fix Name'),
+            React.createElement('button', {
+              key: 'edit-btn',
+              onClick: () => handleEdit(selectedVendor),
+              className: 'px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700'
+            }, 'Edit'),
+            React.createElement('button', {
+              key: 'close-btn',
+              onClick: () => setShowSummary(false),
+              className: 'px-3 py-1 border rounded hover:bg-gray-50'
+            }, 'Close')
+          ])
+        ]),
+        
+        // Main content - 2 columns on larger screens
+        React.createElement('div', { 
+          key: 'content',
+          className: 'grid grid-cols-1 md:grid-cols-2 gap-6' 
+        }, [
+          // Left column - Contact info
+          React.createElement('div', { key: 'contact-info' }, [
+            React.createElement('h4', { 
+              key: 'contact-header',
+              className: 'font-medium text-gray-700 mb-3' 
+            }, 'Vendor Information'),
+            
+            React.createElement('div', { 
+              key: 'contact-details',
+              className: 'space-y-2' 
+            }, [
+              // Vendor ID
+              selectedVendor.vendorId && React.createElement('div', { 
+                key: 'vendor-id',
+                className: 'flex items-start' 
+              }, [
+                React.createElement('div', { 
+                  key: 'vendor-id-label',
+                  className: 'text-gray-500 w-24' 
+                }, 'Vendor ID:'),
+                React.createElement('div', { 
+                  key: 'vendor-id-value',
+                  className: 'font-mono' 
+                }, selectedVendor.vendorId)
+              ]),
+              
+              // Add Created On field
+              selectedVendor.createdDate && React.createElement('div', { 
+                key: 'created-on',
+                className: 'flex items-start' 
+              }, [
+                React.createElement('div', { 
+                  key: 'created-on-label',
+                  className: 'text-gray-500 w-24' 
+                }, 'Created:'),
+                React.createElement('div', { 
+                  key: 'created-on-value'
+                }, new Date(selectedVendor.createdDate).toLocaleDateString())
+              ]),
+              
+              selectedVendor.vendorName && React.createElement('div', { 
+                key: 'vendor-name',
+                className: 'flex items-start' 
+              }, [
+                React.createElement('div', { 
+                  key: 'vendor-name-label',
+                  className: 'text-gray-500 w-24' 
+                }, 'Name:'),
+                React.createElement('div', { 
+                  key: 'vendor-name-value'
+                }, selectedVendor.vendorName)
+              ]),
+              
+              // Contact Person (if available)
+              selectedVendor.contactPerson && React.createElement('div', { 
+                key: 'contact-person',
+                className: 'flex items-start' 
+              }, [
+                React.createElement('div', { 
+                  key: 'contact-person-label',
+                  className: 'text-gray-500 w-24' 
+                }, 'Contact:'),
+                React.createElement('div', { 
+                  key: 'contact-person-value'
+                }, selectedVendor.contactPerson)
+              ]),
+              
+              // Phone
+              selectedVendor.phone && React.createElement('div', { 
+                key: 'phone',
+                className: 'flex items-start' 
+              }, [
+                React.createElement('div', { 
+                  key: 'phone-label',
+                  className: 'text-gray-500 w-24' 
+                }, 'Phone:'),
+                React.createElement('div', { 
+                  key: 'phone-value'
+                }, selectedVendor.phone)
+              ]),
+              
+              // Email
+              selectedVendor.email && React.createElement('div', { 
+                key: 'email',
+                className: 'flex items-start' 
+              }, [
+                React.createElement('div', { 
+                  key: 'email-label',
+                  className: 'text-gray-500 w-24' 
+                }, 'Email:'),
+                React.createElement('div', { 
+                  key: 'email-value'
+                }, selectedVendor.email)
+              ]),
+              
+              // Address
+              selectedVendor.address && React.createElement('div', { 
+                key: 'address',
+                className: 'flex items-start' 
+              }, [
+                React.createElement('div', { 
+                  key: 'address-label',
+                  className: 'text-gray-500 w-24' 
+                }, 'Address:'),
+                React.createElement('div', { 
+                  key: 'address-value'
+                }, selectedVendor.address)
+              ]),
+              
+              // City, State, ZIP
+              (selectedVendor.city || selectedVendor.state || selectedVendor.zip) && 
+              React.createElement('div', { 
+                key: 'location',
+                className: 'flex items-start' 
+              }, [
+                React.createElement('div', { 
+                  key: 'location-label',
+                  className: 'text-gray-500 w-24' 
+                }, 'Location:'),
+                React.createElement('div', { 
+                  key: 'location-value'
+                }, [
+                  selectedVendor.city,
+                  selectedVendor.state ? `, ${selectedVendor.state}` : '',
+                  selectedVendor.zip ? ` ${selectedVendor.zip}` : ''
+                ].join(''))
+              ]),
+              
+              // Status with color coding
+              selectedVendor.status && React.createElement('div', { 
+                key: 'status',
+                className: 'flex items-start' 
+              }, [
+                React.createElement('div', { 
+                  key: 'status-label',
+                  className: 'text-gray-500 w-24' 
+                }, 'Status:'),
+                React.createElement('span', {
+                  key: 'status-value',
+                  className: `px-2 py-1 rounded text-xs ${
+                    selectedVendor.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :
+                    selectedVendor.status === 'INACTIVE' ? 'bg-red-100 text-red-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`
+                }, selectedVendor.status)
+              ])
+            ])
+          ]),
+          
+          // Right column - Quick stats
+          React.createElement('div', { key: 'stats' }, [
+            React.createElement('h4', { 
+              key: 'stats-header',
+              className: 'font-medium text-gray-700 mb-3' 
+            }, 'Purchase Statistics'),
+            
+            React.createElement('div', { 
+              key: 'stats-grid',
+              className: 'grid grid-cols-2 gap-4' 
+            }, [
+              // Total Purchases
+              React.createElement('div', { 
+                key: 'total-purchases',
+                className: 'bg-gray-50 p-3 rounded' 
+              }, [
+                React.createElement('div', { 
+                  key: 'total-purchases-label',
+                  className: 'text-sm text-gray-500' 
+                }, 'Total Orders'),
+                React.createElement('div', { 
+                  key: 'total-purchases-value',
+                  className: 'text-xl font-semibold' 
+                }, metrics.receiptCount || 0)
+              ]),
+              
+              // Unique Projects
+              React.createElement('div', { 
+                key: 'projects-count',
+                className: 'bg-gray-50 p-3 rounded' 
+              }, [
+                React.createElement('div', { 
+                  key: 'projects-count-label',
+                  className: 'text-sm text-gray-500' 
+                }, 'Projects'),
+                React.createElement('div', { 
+                  key: 'projects-count-value',
+                  className: 'text-xl font-semibold' 
+                }, metrics.uniqueProjects || 0)
+              ]),
+              
+              // Last Purchase Date
+              React.createElement('div', { 
+                key: 'last-purchase',
+                className: 'bg-gray-50 p-3 rounded' 
+              }, [
+                React.createElement('div', { 
+                  key: 'last-purchase-label',
+                  className: 'text-sm text-gray-500' 
+                }, 'Last Purchase'),
+                React.createElement('div', { 
+                  key: 'last-purchase-value',
+                  className: 'text-md' 
+                }, 
+                  recentReceipts.length > 0 
+                    ? new Date(recentReceipts[0].timestamp || Date.now()).toLocaleDateString() 
+                    : 'None'
+                )
+              ]),
+              
+              // Total Spend
+              React.createElement('div', { 
+                key: 'total-spend',
+                className: 'bg-gray-50 p-3 rounded' 
+              }, [
+                React.createElement('div', { 
+                  key: 'total-spend-label',
+                  className: 'text-sm text-gray-500' 
+                }, 'Total Spend'),
+                React.createElement('div', { 
+                  key: 'total-spend-value',
+                  className: 'text-xl font-semibold' 
+                }, 
+                  `$${(metrics.totalSpent || 0).toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  })}`
+                )
+              ])
+            ])
+          ])
+        ]),
+        
+        // Recent purchases section
+        React.createElement('div', { key: 'recent-purchases', className: 'pt-4 border-t' }, [
+          React.createElement('h4', { 
+            key: 'purchases-header',
+            className: 'font-medium text-gray-700 mb-3' 
+          }, 'Recent Purchases'),
+          
+          recentReceipts.length === 0 ?
+            React.createElement('div', { 
+              key: 'no-purchases',
+              className: 'text-gray-500 py-4' 
+            }, 'No recent purchases found.') :
+            React.createElement('div', { 
+              key: 'purchases-table',
+              className: 'overflow-x-auto' 
+            }, 
+              React.createElement('table', { className: 'min-w-full' }, [
+                React.createElement('thead', { key: 'thead' },
+                  React.createElement('tr', { key: 'header-row' }, [
+                    React.createElement('th', { 
+                      key: 'header-receipt-id',
+                      className: 'px-4 py-2 text-left text-xs font-medium text-gray-500' 
+                    }, 'Receipt ID'),
+                    React.createElement('th', { 
+                      key: 'header-project-id',
+                      className: 'px-4 py-2 text-left text-xs font-medium text-gray-500' 
+                    }, 'Project ID'),
+                    React.createElement('th', { 
+                      key: 'header-amount',
+                      className: 'px-4 py-2 text-left text-xs font-medium text-gray-500' 
+                    }, 'Amount'),
+                    React.createElement('th', { 
+                      key: 'header-date',
+                      className: 'px-4 py-2 text-left text-xs font-medium text-gray-500' 
+                    }, 'Created'),
+                    React.createElement('th', { 
+                      key: 'header-doc',
+                      className: 'px-4 py-2 text-left text-xs font-medium text-gray-500' 
+                    }, 'Receipt')
+                  ])
+                ),
+                React.createElement('tbody', { key: 'tbody' },
+                  recentReceipts.map((receipt, index) => {
+                    console.log('Processing receipt:', receipt); // Add logging
+                    return React.createElement('tr', { key: `purchase-${index}`, className: 'border-t' }, [
+                      React.createElement('td', { 
+                        key: `purchase-${index}-receipt-id`,
+                        className: 'px-4 py-2 text-sm font-mono' 
+                      }, receipt.receiptId || receipt.id || 'N/A'),
+                      React.createElement('td', { 
+                        key: `purchase-${index}-project-id`,
+                        className: 'px-4 py-2 text-sm' 
+                      }, receipt.projectId || 'N/A'),
+                      React.createElement('td', { 
+                        key: `purchase-${index}-amount`,
+                        className: 'px-4 py-2 text-sm font-medium' 
+                      }, 
+                        `$${(parseFloat(receipt.amount) || 0).toLocaleString('en-US', {
+                          minimumFractionDigits: 2, 
+                          maximumFractionDigits: 2
+                        })}`
+                      ),
+                      React.createElement('td', { 
+                        key: `purchase-${index}-date`,
+                        className: 'px-4 py-2 text-sm' 
+                      }, receipt.createdOn || receipt.timestamp || 'N/A'),
+                      React.createElement('td', { 
+                        key: `purchase-${index}-doc`,
+                        className: 'px-4 py-2 text-sm' 
+                      }, 
+                        receipt.receiptDocURL ? 
+                          React.createElement('a', {
+                            href: receipt.receiptDocURL,
+                            target: '_blank',
+                            rel: 'noopener noreferrer',
+                            className: 'text-blue-600 hover:underline'
+                          }, 'View Receipt') :
+                          React.createElement('span', {
+                            className: 'text-gray-400'
+                          }, 'No Receipt')
+                      )
+                    ]);
                   })
                 )
+              ])
+            )
+        ])
+      ]);
+    };
+
+    // Vendor Form Component
+    const VendorForm = () => {
+      const handlePhoneChange = (e) => {
+        const value = e.target.value;
+        const cleaned = value.replace(/\D/g, '');
+        
+        let formatted = '';
+        if (cleaned.length > 0) {
+          if (cleaned.length <= 3) {
+            formatted = `(${cleaned}`;
+          } else if (cleaned.length <= 6) {
+            formatted = `(${cleaned.slice(0, 3)}) ${cleaned.slice(3)}`;
+          } else {
+            formatted = `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`;
+          }
+        }
+        
+        setFormData(prev => ({ ...prev, phone: formatted }));
+      };
+
+      return React.createElement('form', {
+        onSubmit: handleSubmit,
+        className: 'space-y-4'
+      }, [
+        React.createElement(SharedUI.Input, {
+          key: 'vendorName',
+          label: 'Vendor Name',
+          value: formData.vendorName || '',
+          onChange: (e) => setFormData(prev => ({ ...prev, vendorName: e.target.value })),
+          required: true
+        }),
+        React.createElement(SharedUI.Input, {
+          key: 'contactPerson',
+          label: 'Contact Person',
+          value: formData.contactPerson || '',
+          onChange: (e) => setFormData(prev => ({ ...prev, contactPerson: e.target.value }))
+        }),
+        React.createElement(SharedUI.Input, {
+          key: 'contactEmail',
+          label: 'Email',
+          type: 'email',
+          value: formData.contactEmail || '',
+          onChange: (e) => setFormData(prev => ({ ...prev, contactEmail: e.target.value }))
+        }),
+        React.createElement(SharedUI.Input, {
+          key: 'phone',
+          label: 'Phone',
+          type: 'tel',
+          value: formData.phone || '',
+          onChange: handlePhoneChange
+        }),
+        React.createElement(SharedUI.Input, {
+          key: 'address',
+          label: 'Address',
+          value: formData.address || '',
+          onChange: (e) => setFormData(prev => ({ ...prev, address: e.target.value }))
+        }),
+        React.createElement(SharedUI.Input, {
+          key: 'category',
+          label: 'Category',
+          value: formData.category,
+          onChange: (e) => setFormData(prev => ({ ...prev, category: e.target.value }))
+        }),
+        React.createElement(SharedUI.Select, {
+          key: 'status',
+          label: 'Status',
+          value: formData.status,
+          onChange: (e) => setFormData(prev => ({ ...prev, status: e.target.value })),
+          options: constants?.VENDOR_STATUSES ? 
+            Object.entries(constants.VENDOR_STATUSES).map(([_, value]) => value) : 
+            ['ACTIVE', 'INACTIVE', 'PENDING', 'ARCHIVED'],
+          required: true
+        }),
+        React.createElement('div', {
+          key: 'buttons',
+          className: 'flex flex-col sm:flex-row gap-4'
+        }, [
+          React.createElement(SharedUI.Button, {
+            key: 'submit',
+            text: selectedVendor ? 'Update Vendor' : 'Add Vendor',
+            type: 'submit'
+          }),
+          React.createElement(SharedUI.Button, {
+            key: 'cancel',
+            text: 'Cancel',
+            variant: 'secondary',
+            onClick: () => {
+              setShowForm(false);
+              setSelectedVendor(null);
+            }
+          })
+        ])
+      ].filter(Boolean));
+    };
+
+    // Vendor List Component
+    const VendorList = () => {
+      const [filteredVendors, setFilteredVendors] = React.useState(vendors);
+      const [searchTerm, setSearchTerm] = React.useState('');
+      
+      React.useEffect(() => {
+        if (searchTerm.trim()) {
+          const term = searchTerm.toLowerCase();
+          setFilteredVendors(
+            vendors.filter(vendor => 
+              (vendor.vendorName && vendor.vendorName.toLowerCase().includes(term)) ||
+              (vendor.contactEmail && vendor.contactEmail.toLowerCase().includes(term)) ||
+              (vendor.phone && vendor.phone.includes(searchTerm)) ||
+              (vendor.contactPerson && vendor.contactPerson.toLowerCase().includes(term)) ||
+              (vendor.category && vendor.category.toLowerCase().includes(term))
+            )
+          );
+        } else {
+          setFilteredVendors(vendors);
+        }
+      }, [searchTerm, vendors]);
+      
+      if (!vendors.length) {
+        return React.createElement(SharedUI.Card, {
+          className: 'text-center py-8'
+        }, [
+          React.createElement('p', {
+            key: 'no-vendors-text',
+            className: 'text-gray-500'
+          }, 'No vendors found'),
+          React.createElement(SharedUI.Button, {
+            key: 'add-button',
+            text: 'Add Vendor',
+            onClick: () => setShowForm(true),
+            className: 'mt-4 max-w-xs mx-auto'
+          })
+        ]);
+      }
+
+      return React.createElement('div', {
+        key: 'vendor-list-container',
+        className: 'space-y-6'
+      }, [
+        // Controls row
+        React.createElement('div', { 
+          key: 'controls-row',
+          className: 'flex flex-col sm:flex-row justify-between items-center gap-4 mb-6' 
+        }, [
+          React.createElement('input', {
+            key: 'search-input',
+            type: 'text',
+            placeholder: 'Search vendors...',
+            className: 'p-2 border rounded w-full sm:w-64',
+            value: searchTerm,
+            onChange: (e) => setSearchTerm(e.target.value)
+          }),
+          React.createElement(SharedUI.Button, {
+            key: 'add-new-button',
+            text: 'Add New Vendor',
+            onClick: () => setShowForm(true)
+          })
+        ]),
+        
+        // Export button
+        React.createElement('div', { 
+          key: 'export-button-container',
+          className: 'flex justify-end mb-4' 
+        },
+          React.createElement('button', {
+            key: 'export-button',
+            onClick: () => {
+              // Simple CSV export (unchanged)
+              const exportData = filteredVendors.map(v => ({
+                'Vendor Name': v.vendorName || '',
+                'Contact Person': v.contactPerson || '',
+                'Email': v.contactEmail || '',
+                'Phone': v.phone || '',
+                'Address': v.address || ''
+              }));
+              
+              if (exportData.length === 0) {
+                alert('No data to export');
+                return;
+              }
+              
+              const headers = Object.keys(exportData[0]);
+              const csvContent = [
+                headers.join(','),
+                ...exportData.map(row => 
+                  headers.map(header => 
+                    JSON.stringify(row[header] || '')
+                  ).join(',')
+                )
+              ].join('\n');
+              
+              const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+              const link = document.createElement('a');
+              if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', `vendor_data_${new Date().toISOString()}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }
+            },
+            className: 'px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700'
+          }, 'Export CSV')
+        ),
+        
+        // Vendor cards container
+        React.createElement('div', { 
+          key: 'vendor-cards',
+          className: 'space-y-4' 
+        },
+          filteredVendors.map((vendor, index) => 
+            React.createElement('div', {
+              key: `vendor-card-${index}`,
+              className: 'bg-white rounded-lg shadow p-4 cursor-pointer hover:shadow-md transition-shadow duration-200',
+              onClick: () => handleRowClick(vendor)
+            }, [
+              React.createElement('div', { 
+                key: 'card-content',
+                className: 'flex flex-col md:flex-row justify-between items-start md:items-center'
+              }, [
+                // Left side - Vendor info
+                React.createElement('div', { key: 'info-container', className: 'mb-4 md:mb-0' }, [
+                  React.createElement('h3', { 
+                    key: 'vendor-name',
+                    className: 'text-lg font-semibold'
+                  }, vendor.vendorName || 'Unnamed Vendor'),
+                  
+                  // Contact info
+                  React.createElement('div', { key: `contact-info-${index}`, className: 'text-sm text-gray-500 mt-1' }, [
+                    vendor.contactEmail && React.createElement('div', { key: `email-${index}` }, vendor.contactEmail),
+                    vendor.phone && React.createElement('div', { key: `phone-${index}` }, vendor.phone)
+                  ].filter(Boolean))
+                ]),
+                
+                // Right side - Actions
+                React.createElement('div', { key: 'actions-container', className: 'flex gap-2' }, [
+                  React.createElement('button', {
+                    key: 'edit-btn',
+                    onClick: (e) => {
+                      e.stopPropagation(); // Prevent row click
+                      handleEdit(vendor);
+                    },
+                    className: 'px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300'
+                  }, 'Edit'),
+                  React.createElement('button', {
+                    key: 'delete-btn',
+                    onClick: (e) => {
+                      e.stopPropagation(); // Prevent row click
+                      handleDelete(vendor.vendorId);
+                    },
+                    className: 'px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700'
+                  }, 'Delete')
+                ])
+              ])
+            ])
           )
-    );
+        )
+      ]);
+    };
+
+    return React.createElement(SharedUI.Container, null, [
+      React.createElement('h2', { 
+        key: 'title',
+        className: 'text-2xl font-bold mb-6' 
+      }, 'Vendor Management'),
+      
+      // Loading State
+      loading && React.createElement(SharedUI.LoadingOverlay, {
+        key: 'loading-overlay'
+      }),
+
+      // Error Message
+      error && React.createElement('div', {
+        key: 'error-message',
+        className: 'bg-red-100 text-red-700 p-4 rounded-lg mb-6'
+      }, error),
+
+      // Form Modal
+      showForm && React.createElement(SharedUI.BottomSheet, {
+        key: 'form-modal',
+        isOpen: true,
+        onClose: () => {
+          setShowForm(false);
+          setSelectedVendor(null);
+        },
+        title: selectedVendor ? 'Edit Vendor' : 'Add New Vendor'
+      }, React.createElement(VendorForm)),
+
+      // Summary Modal
+      showSummary && React.createElement('div', {
+        key: 'summary-view',
+        className: 'mt-6 mb-6'
+      }, React.createElement(VendorSummary)),
+
+      // Main Content - Only show if not viewing summary
+      !showForm && !showSummary && React.createElement(VendorList, {
+        key: 'vendor-list'
+      })
+    ].filter(Boolean));
   };
 
-  // Export to global window object
-  if (typeof window !== 'undefined') {
-    window.VendorManagement = VendorManagement;
-  }
+  // Expose to global scope
+  window.VendorManagementComponent = VendorManagementComponent;
 })();
 </script>
